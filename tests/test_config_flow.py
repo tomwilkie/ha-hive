@@ -4,14 +4,13 @@ from unittest.mock import AsyncMock, patch
 
 from apyhiveapi.helper import hive_exceptions
 import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.hive.const import CONF_CODE, CONF_DEVICE_NAME, DOMAIN
 from homeassistant import config_entries
-from homeassistant.components.hive.const import CONF_CODE, CONF_DEVICE_NAME, DOMAIN
 from homeassistant.const import CONF_PASSWORD, CONF_SCAN_INTERVAL, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
-
-from tests.common import MockConfigEntry
 
 USERNAME = "username@home-assistant.com"
 UPDATED_USERNAME = "updated_username@home-assistant.com"
@@ -41,9 +40,9 @@ async def test_user_flow(hass: HomeAssistant, username: str) -> None:
     assert result["errors"] == {}
 
     with (
-        patch("homeassistant.components.hive.config_flow.Auth") as mock_auth,
+        patch("custom_components.hive.config_flow.Auth") as mock_auth,
         patch(
-            "homeassistant.components.hive.async_setup_entry",
+            "custom_components.hive.async_setup_entry",
             return_value=True,
         ) as mock_setup_entry,
     ):
@@ -91,7 +90,7 @@ async def test_user_flow_with_no_2fa(hass: HomeAssistant) -> None:
     assert result["errors"] == {}
 
     with patch(
-        "homeassistant.components.hive.config_flow.Auth.login",
+        "custom_components.hive.config_flow.Auth.login",
         return_value={
             "ChallengeName": "SUCCESS",
             "AuthenticationResult": {
@@ -118,11 +117,11 @@ async def test_user_flow_with_no_2fa(hass: HomeAssistant) -> None:
 
     with (
         patch(
-            "homeassistant.components.hive.config_flow.Auth.device_registration",
+            "custom_components.hive.config_flow.Auth.device_registration",
             return_value=True,
         ),
         patch(
-            "homeassistant.components.hive.config_flow.Auth.get_device_data",
+            "custom_components.hive.config_flow.Auth.get_device_data",
             return_value=[
                 "mock-device-group-key",
                 "mock-device-key",
@@ -130,7 +129,7 @@ async def test_user_flow_with_no_2fa(hass: HomeAssistant) -> None:
             ],
         ),
         patch(
-            "homeassistant.components.hive.async_setup_entry",
+            "custom_components.hive.async_setup_entry",
             return_value=True,
         ) as mock_setup_entry,
     ):
@@ -179,7 +178,7 @@ async def test_user_flow_2fa(hass: HomeAssistant) -> None:
     assert result["errors"] == {}
 
     with patch(
-        "homeassistant.components.hive.config_flow.Auth.login",
+        "custom_components.hive.config_flow.Auth.login",
         return_value={
             "ChallengeName": "SMS_MFA",
         },
@@ -197,7 +196,7 @@ async def test_user_flow_2fa(hass: HomeAssistant) -> None:
     assert result["errors"] == {}
 
     with patch(
-        "homeassistant.components.hive.config_flow.Auth.sms_2fa",
+        "custom_components.hive.config_flow.Auth.sms_2fa",
         return_value={
             "ChallengeName": "SUCCESS",
             "AuthenticationResult": {
@@ -219,11 +218,11 @@ async def test_user_flow_2fa(hass: HomeAssistant) -> None:
 
     with (
         patch(
-            "homeassistant.components.hive.config_flow.Auth.device_registration",
+            "custom_components.hive.config_flow.Auth.device_registration",
             return_value=True,
         ),
         patch(
-            "homeassistant.components.hive.config_flow.Auth.get_device_data",
+            "custom_components.hive.config_flow.Auth.get_device_data",
             return_value=[
                 "mock-device-group-key",
                 "mock-device-key",
@@ -231,7 +230,7 @@ async def test_user_flow_2fa(hass: HomeAssistant) -> None:
             ],
         ),
         patch(
-            "homeassistant.components.hive.async_setup_entry",
+            "custom_components.hive.async_setup_entry",
             return_value=True,
         ) as mock_setup_entry,
     ):
@@ -284,7 +283,7 @@ async def test_reauth_flow(hass: HomeAssistant) -> None:
     mock_config.add_to_hass(hass)
 
     with patch(
-        "homeassistant.components.hive.config_flow.Auth.login",
+        "custom_components.hive.config_flow.Auth.login",
         side_effect=hive_exceptions.HiveInvalidPassword(),
     ):
         result = await mock_config.start_reauth_flow(hass)
@@ -293,7 +292,7 @@ async def test_reauth_flow(hass: HomeAssistant) -> None:
     assert result["errors"] == {"base": "invalid_password"}
 
     with patch(
-        "homeassistant.components.hive.config_flow.Auth.login",
+        "custom_components.hive.config_flow.Auth.login",
         return_value={
             "ChallengeName": "SUCCESS",
             "AuthenticationResult": {
@@ -341,7 +340,7 @@ async def test_reauth_2fa_flow(hass: HomeAssistant) -> None:
     mock_config.add_to_hass(hass)
 
     with patch(
-        "homeassistant.components.hive.config_flow.Auth.login",
+        "custom_components.hive.config_flow.Auth.login",
         return_value={
             "ChallengeName": "SMS_MFA",
         },
@@ -354,7 +353,7 @@ async def test_reauth_2fa_flow(hass: HomeAssistant) -> None:
 
     with (
         patch(
-            "homeassistant.components.hive.config_flow.Auth.sms_2fa",
+            "custom_components.hive.config_flow.Auth.sms_2fa",
             return_value={
                 "ChallengeName": "SUCCESS",
                 "AuthenticationResult": {
@@ -364,11 +363,11 @@ async def test_reauth_2fa_flow(hass: HomeAssistant) -> None:
             },
         ),
         patch(
-            "homeassistant.components.hive.config_flow.Auth.is_device_registered",
+            "custom_components.hive.config_flow.Auth.is_device_registered",
             return_value=True,
         ),
         patch(
-            "homeassistant.components.hive.async_setup_entry",
+            "custom_components.hive.async_setup_entry",
             return_value=True,
         ) as mock_setup_entry,
     ):
@@ -411,7 +410,7 @@ async def test_reauth_2fa_flow_device_not_registered(hass: HomeAssistant) -> Non
     mock_config.add_to_hass(hass)
 
     with patch(
-        "homeassistant.components.hive.config_flow.Auth.login",
+        "custom_components.hive.config_flow.Auth.login",
         return_value={
             "ChallengeName": "SMS_MFA",
         },
@@ -424,7 +423,7 @@ async def test_reauth_2fa_flow_device_not_registered(hass: HomeAssistant) -> Non
 
     with (
         patch(
-            "homeassistant.components.hive.config_flow.Auth.sms_2fa",
+            "custom_components.hive.config_flow.Auth.sms_2fa",
             return_value={
                 "ChallengeName": "SUCCESS",
                 "AuthenticationResult": {
@@ -434,7 +433,7 @@ async def test_reauth_2fa_flow_device_not_registered(hass: HomeAssistant) -> Non
             },
         ),
         patch(
-            "homeassistant.components.hive.config_flow.Auth.is_device_registered",
+            "custom_components.hive.config_flow.Auth.is_device_registered",
             return_value=False,
         ),
     ):
@@ -451,11 +450,11 @@ async def test_reauth_2fa_flow_device_not_registered(hass: HomeAssistant) -> Non
 
     with (
         patch(
-            "homeassistant.components.hive.config_flow.Auth.device_registration",
+            "custom_components.hive.config_flow.Auth.device_registration",
             return_value=True,
         ),
         patch(
-            "homeassistant.components.hive.config_flow.Auth.get_device_data",
+            "custom_components.hive.config_flow.Auth.get_device_data",
             return_value=[
                 "mock-device-group-key",
                 "mock-device-key",
@@ -463,7 +462,7 @@ async def test_reauth_2fa_flow_device_not_registered(hass: HomeAssistant) -> Non
             ],
         ),
         patch(
-            "homeassistant.components.hive.async_setup_entry",
+            "custom_components.hive.async_setup_entry",
             return_value=True,
         ) as mock_setup_entry,
     ):
@@ -508,7 +507,7 @@ async def test_reauth_2fa_flow_device_registration_check_fails(
     mock_config.add_to_hass(hass)
 
     with patch(
-        "homeassistant.components.hive.config_flow.Auth.login",
+        "custom_components.hive.config_flow.Auth.login",
         return_value={
             "ChallengeName": "SMS_MFA",
         },
@@ -521,7 +520,7 @@ async def test_reauth_2fa_flow_device_registration_check_fails(
 
     with (
         patch(
-            "homeassistant.components.hive.config_flow.Auth.sms_2fa",
+            "custom_components.hive.config_flow.Auth.sms_2fa",
             return_value={
                 "ChallengeName": "SUCCESS",
                 "AuthenticationResult": {
@@ -531,7 +530,7 @@ async def test_reauth_2fa_flow_device_registration_check_fails(
             },
         ),
         patch(
-            "homeassistant.components.hive.config_flow.Auth.is_device_registered",
+            "custom_components.hive.config_flow.Auth.is_device_registered",
             side_effect=hive_exceptions.HiveApiError(),
         ),
     ):
@@ -548,7 +547,7 @@ async def test_reauth_2fa_flow_device_registration_check_fails(
 
     with (
         patch(
-            "homeassistant.components.hive.config_flow.Auth.sms_2fa",
+            "custom_components.hive.config_flow.Auth.sms_2fa",
             return_value={
                 "ChallengeName": "SUCCESS",
                 "AuthenticationResult": {
@@ -558,11 +557,11 @@ async def test_reauth_2fa_flow_device_registration_check_fails(
             },
         ),
         patch(
-            "homeassistant.components.hive.config_flow.Auth.is_device_registered",
+            "custom_components.hive.config_flow.Auth.is_device_registered",
             return_value=True,
         ),
         patch(
-            "homeassistant.components.hive.async_setup_entry",
+            "custom_components.hive.async_setup_entry",
             return_value=True,
         ) as mock_setup_entry,
     ):
@@ -629,7 +628,7 @@ async def test_user_flow_2fa_send_new_code(hass: HomeAssistant) -> None:
     assert result["errors"] == {}
 
     with patch(
-        "homeassistant.components.hive.config_flow.Auth.login",
+        "custom_components.hive.config_flow.Auth.login",
         return_value={
             "ChallengeName": "SMS_MFA",
         },
@@ -647,7 +646,7 @@ async def test_user_flow_2fa_send_new_code(hass: HomeAssistant) -> None:
     assert result["errors"] == {}
 
     with patch(
-        "homeassistant.components.hive.config_flow.Auth.login",
+        "custom_components.hive.config_flow.Auth.login",
         return_value={
             "ChallengeName": "SMS_MFA",
         },
@@ -662,7 +661,7 @@ async def test_user_flow_2fa_send_new_code(hass: HomeAssistant) -> None:
     assert result["errors"] == {}
 
     with patch(
-        "homeassistant.components.hive.config_flow.Auth.sms_2fa",
+        "custom_components.hive.config_flow.Auth.sms_2fa",
         return_value={
             "ChallengeName": "SUCCESS",
             "AuthenticationResult": {
@@ -684,11 +683,11 @@ async def test_user_flow_2fa_send_new_code(hass: HomeAssistant) -> None:
 
     with (
         patch(
-            "homeassistant.components.hive.config_flow.Auth.device_registration",
+            "custom_components.hive.config_flow.Auth.device_registration",
             return_value=True,
         ),
         patch(
-            "homeassistant.components.hive.config_flow.Auth.get_device_data",
+            "custom_components.hive.config_flow.Auth.get_device_data",
             return_value=[
                 "mock-device-group-key",
                 "mock-device-key",
@@ -696,7 +695,7 @@ async def test_user_flow_2fa_send_new_code(hass: HomeAssistant) -> None:
             ],
         ),
         patch(
-            "homeassistant.components.hive.async_setup_entry",
+            "custom_components.hive.async_setup_entry",
             return_value=True,
         ) as mock_setup_entry,
     ):
@@ -766,7 +765,7 @@ async def test_user_flow_invalid_username(hass: HomeAssistant) -> None:
     assert result["errors"] == {}
 
     with patch(
-        "homeassistant.components.hive.config_flow.Auth.login",
+        "custom_components.hive.config_flow.Auth.login",
         side_effect=hive_exceptions.HiveInvalidUsername(),
     ):
         result = await hass.config_entries.flow.async_configure(
@@ -789,7 +788,7 @@ async def test_user_flow_invalid_password(hass: HomeAssistant) -> None:
     assert result["errors"] == {}
 
     with patch(
-        "homeassistant.components.hive.config_flow.Auth.login",
+        "custom_components.hive.config_flow.Auth.login",
         side_effect=hive_exceptions.HiveInvalidPassword(),
     ):
         result = await hass.config_entries.flow.async_configure(
@@ -813,7 +812,7 @@ async def test_user_flow_no_internet_connection(hass: HomeAssistant) -> None:
     assert result["errors"] == {}
 
     with patch(
-        "homeassistant.components.hive.config_flow.Auth.login",
+        "custom_components.hive.config_flow.Auth.login",
         side_effect=hive_exceptions.HiveApiError(),
     ):
         result = await hass.config_entries.flow.async_configure(
@@ -837,7 +836,7 @@ async def test_user_flow_2fa_no_internet_connection(hass: HomeAssistant) -> None
     assert result["errors"] == {}
 
     with patch(
-        "homeassistant.components.hive.config_flow.Auth.login",
+        "custom_components.hive.config_flow.Auth.login",
         return_value={
             "ChallengeName": "SMS_MFA",
         },
@@ -852,7 +851,7 @@ async def test_user_flow_2fa_no_internet_connection(hass: HomeAssistant) -> None
     assert result["errors"] == {}
 
     with patch(
-        "homeassistant.components.hive.config_flow.Auth.sms_2fa",
+        "custom_components.hive.config_flow.Auth.sms_2fa",
         side_effect=hive_exceptions.HiveApiError(),
     ):
         result = await hass.config_entries.flow.async_configure(
@@ -875,7 +874,7 @@ async def test_user_flow_2fa_invalid_code(hass: HomeAssistant) -> None:
     assert result["errors"] == {}
 
     with patch(
-        "homeassistant.components.hive.config_flow.Auth.login",
+        "custom_components.hive.config_flow.Auth.login",
         return_value={
             "ChallengeName": "SMS_MFA",
         },
@@ -890,7 +889,7 @@ async def test_user_flow_2fa_invalid_code(hass: HomeAssistant) -> None:
     assert result["errors"] == {}
 
     with patch(
-        "homeassistant.components.hive.config_flow.Auth.sms_2fa",
+        "custom_components.hive.config_flow.Auth.sms_2fa",
         side_effect=hive_exceptions.HiveInvalid2FACode(),
     ):
         result = await hass.config_entries.flow.async_configure(
@@ -912,7 +911,7 @@ async def test_user_flow_unknown_error(hass: HomeAssistant) -> None:
     assert result["errors"] == {}
 
     with patch(
-        "homeassistant.components.hive.config_flow.Auth.login",
+        "custom_components.hive.config_flow.Auth.login",
         return_value={"ChallengeName": "FAILED", "InvalidAuthenticationResult": {}},
     ):
         result = await hass.config_entries.flow.async_configure(
@@ -935,7 +934,7 @@ async def test_user_flow_2fa_unknown_error(hass: HomeAssistant) -> None:
     assert result["errors"] == {}
 
     with patch(
-        "homeassistant.components.hive.config_flow.Auth.login",
+        "custom_components.hive.config_flow.Auth.login",
         return_value={
             "ChallengeName": "SMS_MFA",
         },
@@ -949,7 +948,7 @@ async def test_user_flow_2fa_unknown_error(hass: HomeAssistant) -> None:
     assert result["step_id"] == CONF_CODE
 
     with patch(
-        "homeassistant.components.hive.config_flow.Auth.sms_2fa",
+        "custom_components.hive.config_flow.Auth.sms_2fa",
         return_value={"ChallengeName": "FAILED", "InvalidAuthenticationResult": {}},
     ):
         result = await hass.config_entries.flow.async_configure(
@@ -963,11 +962,11 @@ async def test_user_flow_2fa_unknown_error(hass: HomeAssistant) -> None:
 
     with (
         patch(
-            "homeassistant.components.hive.config_flow.Auth.device_registration",
+            "custom_components.hive.config_flow.Auth.device_registration",
             return_value=True,
         ),
         patch(
-            "homeassistant.components.hive.config_flow.Auth.get_device_data",
+            "custom_components.hive.config_flow.Auth.get_device_data",
             return_value=[
                 "mock-device-group-key",
                 "mock-device-key",

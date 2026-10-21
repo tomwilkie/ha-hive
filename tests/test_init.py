@@ -4,20 +4,19 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from homeassistant.components.binary_sensor import BinarySensorDeviceClass
-from homeassistant.components.hive.const import (
+from custom_components.hive.const import (
     DOMAIN,
     SERVICE_BOOST_HEATING_OFF,
     SERVICE_BOOST_HEATING_ON,
     SERVICE_BOOST_HOT_WATER,
 )
+from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import ATTR_DEVICE_CLASS, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
-
-from tests.common import MockConfigEntry
 
 _ENTRY_DATA = {
     CONF_USERNAME: "user@example.com",
@@ -122,7 +121,7 @@ async def test_hub_device_registers_mac_connection(
     mock_hive = _make_mock_hive({"macAddress": "00:1C:2B:1C:2E:68"})
 
     with patch(
-        "homeassistant.components.hive.Hive",
+        "custom_components.hive.Hive",
         return_value=mock_hive,
     ):
         await hass.config_entries.async_setup(entry.entry_id)
@@ -146,7 +145,7 @@ async def test_hub_device_no_mac_connection_when_absent(
     mock_hive = _make_mock_hive({})  # no macAddress key
 
     with patch(
-        "homeassistant.components.hive.Hive",
+        "custom_components.hive.Hive",
         return_value=mock_hive,
     ):
         await hass.config_entries.async_setup(entry.entry_id)
@@ -177,7 +176,7 @@ async def test_child_device_links_to_hub_via_device_id(
     mock_hive.sensor.getSensor = AsyncMock(side_effect=lambda device: device)
 
     with patch(
-        "homeassistant.components.hive.Hive",
+        "custom_components.hive.Hive",
         return_value=mock_hive,
     ):
         await hass.config_entries.async_setup(entry.entry_id)
@@ -210,7 +209,7 @@ async def test_hub_diagnostic_sensor_not_linked_to_itself(
     mock_hive.sensor.getSensor = AsyncMock(side_effect=lambda device: device)
 
     with patch(
-        "homeassistant.components.hive.Hive",
+        "custom_components.hive.Hive",
         return_value=mock_hive,
     ):
         await hass.config_entries.async_setup(entry.entry_id)
@@ -239,7 +238,7 @@ async def test_glass_break_device_class(
     mock_hive.sensor.getSensor = AsyncMock(side_effect=lambda device: device)
 
     with patch(
-        "homeassistant.components.hive.Hive",
+        "custom_components.hive.Hive",
         return_value=mock_hive,
     ):
         await hass.config_entries.async_setup(entry.entry_id)
@@ -265,7 +264,7 @@ async def test_all_platforms_forwarded_without_devices(
     mock_hive = _make_mock_hive({})
 
     with patch(
-        "homeassistant.components.hive.Hive",
+        "custom_components.hive.Hive",
         return_value=mock_hive,
     ):
         await hass.config_entries.async_setup(entry.entry_id)
