@@ -12,7 +12,7 @@
   "issue_tracker": "https://github.com/tomwilkie/ha-hive/issues",
   "loggers": ["apyhiveapi"],
   "requirements": [
-    "pyhive-integration @ https://github.com/tomwilkie/pyhive-integration/releases/download/v0.0.1/pyhive_integration-0.0.1-py3-none-any.whl"
+    "https://github.com/tomwilkie/pyhive-integration/releases/download/v0.0.1/pyhive_integration-0.0.1-py3-none-any.whl#pyhive-integration==0.0.1"
   ],
   "version": "0.1.0"
 }

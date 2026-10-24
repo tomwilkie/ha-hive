@@ -37,12 +37,20 @@ Requires Home Assistant 2026.10 or later.
 ## Development
 
 ```sh
-uv sync
-uv run pytest
+uv sync                             # Home Assistant, the library wheel and the dev tools
+uv run pytest                       # the full suite, with coverage
+uv run pre-commit run --all-files   # ruff (Home Assistant core's rules), codespell, zizmor, yamllint
+scripts/check_requirements          # install the manifest requirement under core's package pins
 ```
 
+CI runs the same checks, plus [hassfest](https://developers.home-assistant.io/blog/2020/04/16/hassfest/)
+and the [HACS action](https://github.com/hacs/action). `scripts/check_requirements` reproduces how
+Home Assistant installs the library: with uv, under the `package_constraints.txt` of the release
+named in `hacs.json`.
+
 `custom_components/hive/translations/en.json` is generated from `strings.json` by resolving its
-`[%key:...%]` references against core's common strings. Regenerate it when `strings.json` changes.
+`[%key:...%]` references against core's common strings. Regenerate it when `strings.json` changes;
+a test checks that the two files have the same keys.
 
 ## License
 
