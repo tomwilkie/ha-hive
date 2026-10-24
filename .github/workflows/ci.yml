@@ -98,6 +98,10 @@ jobs:
       - uses: hacs/action@main  # zizmor: ignore[unpinned-uses]
         with:
           category: integration
+          # The integration keeps core's `hive` domain, whose brand assets live
+          # under core_integrations in the brands repository; HACS only looks
+          # in custom_integrations, and the frontend already shows the icon.
+          ignore: brands
 
   requirements:
     name: Requirements under Home Assistant's pins
