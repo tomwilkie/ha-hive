@@ -1,0 +1,33 @@
+{
+  "version": "1.1.0",
+  "author": "Python Best Practices",
+  "abstract": "Python test-writing best practices with pytest, trimmed for ha-hive. Covers test structure, fixtures, parametrization, and mocking boundaries.",
+  "categories": 4,
+  "rules": 8,
+  "sections": [
+    {
+      "prefix": "mock",
+      "name": "Mocking",
+      "impact": "CRITICAL",
+      "count": 1
+    },
+    {
+      "prefix": "struct",
+      "name": "Test Structure",
+      "impact": "HIGH",
+      "count": 3
+    },
+    {
+      "prefix": "fixture",
+      "name": "Fixtures",
+      "impact": "HIGH",
+      "count": 2
+    },
+    {
+      "prefix": "param",
+      "name": "Parametrization",
+      "impact": "MEDIUM",
+      "count": 2
+    }
+  ]
+}
