@@ -108,10 +108,10 @@ class HiveClimateEntity(HiveEntity, ClimateEntity):
     ) -> None:
         """Initialize the Climate device."""
         super().__init__(hass, entry, hive, hive_device)
-        self.thermostat_node_id = hive_device["device_id"]
+        self.thermostat_node_id = hive_device.device_id
         # Hive reports no unit when the account has none set.
         self._attr_temperature_unit = TEMP_UNIT.get(
-            hive_device["temperature_unit"], UnitOfTemperature.CELSIUS
+            hive_device.temperature_unit, UnitOfTemperature.CELSIUS
         )
 
     @refresh_system
@@ -154,19 +154,16 @@ class HiveClimateEntity(HiveEntity, ClimateEntity):
         """Update all Node data from Hive."""
         await self.hive.update_data()
         self.device = await self.hive.heating.get_climate(self.device)
-        self._attr_available = self.device["device_data"].get("online")
+        self._attr_available = self.device.device_data.get("online")
         if self._attr_available:
-            self._attr_hvac_mode = HIVE_TO_HASS_STATE.get(self.device["status"]["mode"])
-            self._attr_hvac_action = HIVE_TO_HASS_HVAC_ACTION.get(
-                self.device["status"]["action"]
-            )
-            self._attr_current_temperature = self.device["status"][
-                "current_temperature"
-            ]
-            self._attr_target_temperature = self.device["status"]["target_temperature"]
-            self._attr_min_temp = self.device["min_temp"]
-            self._attr_max_temp = self.device["max_temp"]
-            if self.device["status"]["boost"] == "ON":
+            status = self.device.status
+            self._attr_hvac_mode = HIVE_TO_HASS_STATE.get(status["mode"])
+            self._attr_hvac_action = HIVE_TO_HASS_HVAC_ACTION.get(status["action"])
+            self._attr_current_temperature = status["current_temperature"]
+            self._attr_target_temperature = status["target_temperature"]
+            self._attr_min_temp = self.device.min_temp
+            self._attr_max_temp = self.device.max_temp
+            if status["boost"] == "ON":
                 self._attr_preset_mode = PRESET_BOOST
                 self._attr_hvac_mode = HVACMode.HEAT
             else:

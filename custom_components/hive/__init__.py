@@ -49,7 +49,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: HiveConfigEntry) -> bool
     # The hub is missing when Hive did not report one; the library logs that.
     if devices["parent"]:
         hub_data = devices["parent"][0]
-        hub_props = hub_data["device_data"]
+        hub_props = hub_data.device_data
         connections: set[tuple[str, str]] = set()
         if mac := hub_props.get("macAddress"):
             connections.add((dr.CONNECTION_NETWORK_MAC, mac))
@@ -57,9 +57,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: HiveConfigEntry) -> bool
         device_registry = dr.async_get(hass)
         device_registry.async_get_or_create(
             config_entry_id=entry.entry_id,
-            identifiers={(DOMAIN, hub_data["device_id"])},
+            identifiers={(DOMAIN, hub_data.device_id)},
             connections=connections,
-            name=hub_data["hive_name"],
+            name=hub_data.hive_name,
             model=hub_props.get("model"),
             sw_version=hub_props.get("version"),
             manufacturer=hub_props.get("manufacturer"),

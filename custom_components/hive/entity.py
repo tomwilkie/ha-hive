@@ -29,22 +29,22 @@ class HiveEntity(Entity):
         """Initialize the instance."""
         self.hive = hive
         self.device = hive_device
-        self._attr_name = self.device["ha_name"]
-        self._attr_unique_id = f"{self.device['hive_id']}-{self.device['hive_type']}"
-        device_id = self.device["device_id"]
+        self._attr_name = self.device.ha_name
+        self._attr_unique_id = f"{self.device.hive_id}-{self.device.hive_type}"
+        device_id = self.device.device_id
         # A product with no device of its own carries its own props, which
         # lack the manufacturer.
-        device_data = self.device["device_data"]
+        device_data = self.device.device_data
         device_info = DeviceInfo(
             identifiers={(DOMAIN, device_id)},
             model=device_data.get("model"),
             manufacturer=device_data.get("manufacturer"),
-            name=self.device["device_name"],
+            name=self.device.device_name,
             sw_version=device_data.get("version"),
         )
         # Hive reports the hub itself as its parent, and no parent at all
         # when it did not report a hub.
-        parent_device = self.device["parent_device"]
+        parent_device = self.device.parent_device
         if parent_device and parent_device != device_id:
             device_info["via_device_id"] = dr.async_get_device_id_by_identifier(
                 hass,

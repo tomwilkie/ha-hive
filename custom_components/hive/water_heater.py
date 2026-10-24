@@ -112,9 +112,9 @@ class HiveWaterHeater(HiveEntity, WaterHeaterEntity):
         """Update all Node data from Hive."""
         await self.hive.update_data()
         self.device = await self.hive.hotwater.get_water_heater(self.device)
-        self._attr_available = self.device["device_data"].get("online")
+        self._attr_available = self.device.device_data.get("online")
         if self._attr_available:
             # The library reports None when Hive did not say.
             self._attr_current_operation = HIVE_TO_HASS_STATE.get(
-                self.device["status"]["current_operation"]
+                self.device.status["current_operation"]
             )
