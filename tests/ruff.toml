@@ -1,0 +1,37 @@
+# Extends the root ruff configuration for the tests, as Home Assistant core
+# does with its own tests/ruff.toml.
+extend = "../pyproject.toml"
+
+[lint]
+
+extend-ignore = [
+    "B904",   # Use raise from to specify exception cause
+    "N806",   # Variable {name} in function should be snake_case
+    "N815",   # Variable {name} in class scope should not be mixedCase
+    "RUF018", # Avoid assignment expressions in assert statements
+    "DTZ011", # date.today() used: tests commonly use naive dates
+    "S107",   # Possible hardcoded password assigned to function default
+    "SLF001", # Private member accessed: Tests do often test internals a lot
+]
+
+# The root configuration bans importing `tests`; the tests themselves share
+# helpers through tests/common.py.
+[lint.flake8-tidy-imports.banned-api]
+"async_timeout".msg = "use asyncio.timeout instead"
+"pytz".msg = "use zoneinfo instead"
+"voluptuous".msg = "use probatio instead"
+
+[lint.isort]
+known-first-party = [
+    "homeassistant",
+    "custom_components",
+    "tests",
+]
+known-third-party = [
+    "pytest",
+    "pytest_homeassistant_custom_component",
+    "probatio",
+]
+forced-separate = [
+    "tests",
+]

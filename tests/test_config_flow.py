@@ -1,10 +1,11 @@
 """Test the Hive config flow."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from apyhiveapi import (
     HiveApiError,
     HiveConnectionError,
+    HiveError,
     HiveInvalid2FACode,
     HiveInvalidPassword,
     HiveInvalidUsername,
@@ -14,1011 +15,409 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.hive.const import CONF_CODE, CONF_DEVICE_NAME, DOMAIN
 from homeassistant import config_entries
+from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.const import CONF_PASSWORD, CONF_SCAN_INTERVAL, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
-USERNAME = "username@home-assistant.com"
-UPDATED_USERNAME = "updated_username@home-assistant.com"
-PASSWORD = "test-password"
+from tests.common import (
+    DEVICE_DATA,
+    ENTRY_DATA,
+    PASSWORD,
+    TOKENS,
+    USERNAME,
+    setup_entry,
+)
+
+LOGIN = {CONF_USERNAME: USERNAME, CONF_PASSWORD: PASSWORD}
+SMS_CHALLENGE = {"ChallengeName": "SMS_MFA", "Session": "mock-session"}
+TOKENS_FOR_NEW_DEVICE = {
+    "ChallengeName": "SUCCESS",
+    "AuthenticationResult": {
+        **TOKENS["AuthenticationResult"],
+        "NewDeviceMetadata": {
+            "DeviceGroupKey": "mock-device-group-key",
+            "DeviceKey": "mock-device-key",
+        },
+    },
+}
+NO_TOKENS = {"ChallengeName": "FAILED"}
 UPDATED_PASSWORD = "updated-password"
-INCORRECT_PASSWORD = "incorrect-password"
-SCAN_INTERVAL = 120
-UPDATED_SCAN_INTERVAL = 60
 DEVICE_NAME = "Test Home Assistant"
 MFA_CODE = "1234"
-MFA_RESEND_CODE = "0000"
-MFA_INVALID_CODE = "HIVE"
+RESEND_CODE = "0000"
+
+# The library's errors and the form error each one becomes.
+CONNECTION_ERRORS = [
+    pytest.param(HiveConnectionError(), "no_internet_available", id="no-internet"),
+    pytest.param(HiveApiError(), "unknown", id="refused"),
+]
+LOGIN_ERRORS = [
+    pytest.param(HiveInvalidUsername(), "invalid_username", id="invalid-username"),
+    pytest.param(HiveInvalidPassword(), "invalid_password", id="invalid-password"),
+    *CONNECTION_ERRORS,
+]
+TWO_FACTOR_ERRORS = [
+    pytest.param(HiveInvalid2FACode(), "invalid_code", id="invalid-code"),
+    *CONNECTION_ERRORS,
+]
 
 
-@pytest.mark.parametrize(
-    "username",
-    [USERNAME, USERNAME.upper()],
-    ids=["lowercase", "uppercase"],
-)
-async def test_user_flow(hass: HomeAssistant, username: str) -> None:
-    """Test the user flow normalizes the username for Hive auth."""
-    result = await hass.config_entries.flow.async_init(
+async def _start_user_flow(hass: HomeAssistant) -> ConfigFlowResult:
+    """Open the user flow on its login form."""
+    return await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
 
+
+async def _submit(
+    hass: HomeAssistant, result: ConfigFlowResult, user_input: dict[str, str]
+) -> ConfigFlowResult:
+    """Submit a form of the flow and wait for Home Assistant to settle."""
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input
+    )
+    await hass.async_block_till_done()
+    return result
+
+
+async def test_user_flow_opens_on_the_login_form(hass: HomeAssistant) -> None:
+    """The user flow starts with an empty login form."""
+    result = await _start_user_flow(hass)
+
     assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "user"
     assert result["errors"] == {}
 
-    with (
-        patch("custom_components.hive.config_flow.Auth") as mock_auth,
-        patch(
-            "custom_components.hive.async_setup_entry",
-            return_value=True,
-        ) as mock_setup_entry,
-    ):
-        mock_auth.return_value.login = AsyncMock(
-            return_value={
-                "ChallengeName": "SUCCESS",
-                "AuthenticationResult": {
-                    "RefreshToken": "mock-refresh-token",
-                    "AccessToken": "mock-access-token",
-                },
-            }
-        )
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {CONF_USERNAME: username, CONF_PASSWORD: PASSWORD},
-        )
-        await hass.async_block_till_done()
+
+@pytest.mark.parametrize(
+    "username", [USERNAME, USERNAME.upper()], ids=["lowercase", "uppercase"]
+)
+async def test_login_creates_the_entry(
+    hass: HomeAssistant,
+    mock_auth_class: MagicMock,
+    mock_auth: MagicMock,
+    mock_setup_entry: AsyncMock,
+    username: str,
+) -> None:
+    """A login needing no 2FA or registration creates the entry under the lower-cased username."""
+    mock_auth.login.return_value = TOKENS
+    result = await _start_user_flow(hass)
+
+    result = await _submit(
+        hass, result, {CONF_USERNAME: username, CONF_PASSWORD: PASSWORD}
+    )
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["title"] == username
     assert result["data"] == {
         CONF_USERNAME: username,
         CONF_PASSWORD: PASSWORD,
-        "tokens": {
-            "AuthenticationResult": {
-                "AccessToken": "mock-access-token",
-                "RefreshToken": "mock-refresh-token",
-            },
-            "ChallengeName": "SUCCESS",
-        },
+        "tokens": TOKENS,
     }
-    assert mock_auth.call_args.kwargs["username"] == username.lower()
-    assert len(mock_setup_entry.mock_calls) == 1
-    assert len(hass.config_entries.async_entries(DOMAIN)) == 1
-    assert hass.config_entries.async_entries(DOMAIN)[0].unique_id == username.lower()
+    assert result["result"].unique_id == username.lower()
+    assert mock_auth_class.call_args.kwargs["username"] == username.lower()
+    mock_setup_entry.assert_awaited_once()
 
 
-async def test_user_flow_with_no_2fa(hass: HomeAssistant) -> None:
-    """Test user flow with no 2FA required and device registration."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
+@pytest.mark.usefixtures("mock_setup_entry")
+async def test_login_from_a_new_device_registers_it(
+    hass: HomeAssistant, mock_auth: MagicMock
+) -> None:
+    """Tokens with NewDeviceMetadata lead to the device name form, then registration."""
+    mock_auth.login.return_value = TOKENS_FOR_NEW_DEVICE
+    mock_auth.get_device_data.return_value = DEVICE_DATA
+    result = await _start_user_flow(hass)
 
-    assert result["type"] is FlowResultType.FORM
-    assert result["errors"] == {}
-
-    with patch(
-        "custom_components.hive.config_flow.Auth.login",
-        return_value={
-            "ChallengeName": "SUCCESS",
-            "AuthenticationResult": {
-                "RefreshToken": "mock-refresh-token",
-                "AccessToken": "mock-access-token",
-                "NewDeviceMetadata": {
-                    "DeviceGroupKey": "mock-device-group-key",
-                    "DeviceKey": "mock-device-key",
-                },
-            },
-        },
-    ):
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {
-                CONF_USERNAME: USERNAME,
-                CONF_PASSWORD: PASSWORD,
-            },
-        )
-
+    result = await _submit(hass, result, LOGIN)
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "configuration"
-    assert result["errors"] == {}
 
-    with (
-        patch(
-            "custom_components.hive.config_flow.Auth.device_registration",
-            return_value=True,
-        ),
-        patch(
-            "custom_components.hive.config_flow.Auth.get_device_data",
-            return_value=[
-                "mock-device-group-key",
-                "mock-device-key",
-                "mock-device-password",
-            ],
-        ),
-        patch(
-            "custom_components.hive.async_setup_entry",
-            return_value=True,
-        ) as mock_setup_entry,
-    ):
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {
-                CONF_DEVICE_NAME: DEVICE_NAME,
-            },
-        )
-        await hass.async_block_till_done()
+    result = await _submit(hass, result, {CONF_DEVICE_NAME: DEVICE_NAME})
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["title"] == USERNAME
     assert result["data"] == {
-        CONF_USERNAME: USERNAME,
-        CONF_PASSWORD: PASSWORD,
-        "tokens": {
-            "AuthenticationResult": {
-                "AccessToken": "mock-access-token",
-                "RefreshToken": "mock-refresh-token",
-                "NewDeviceMetadata": {
-                    "DeviceGroupKey": "mock-device-group-key",
-                    "DeviceKey": "mock-device-key",
-                },
-            },
-            "ChallengeName": "SUCCESS",
-        },
-        "device_data": [
-            "mock-device-group-key",
-            "mock-device-key",
-            "mock-device-password",
-        ],
+        **LOGIN,
+        "tokens": TOKENS_FOR_NEW_DEVICE,
+        "device_data": DEVICE_DATA,
     }
-
-    assert len(mock_setup_entry.mock_calls) == 1
-    assert len(hass.config_entries.async_entries(DOMAIN)) == 1
+    mock_auth.device_registration.assert_awaited_once_with(DEVICE_NAME)
 
 
-async def test_user_flow_2fa(hass: HomeAssistant) -> None:
-    """Test user flow with 2FA."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
+@pytest.mark.usefixtures("mock_setup_entry")
+async def test_login_with_2fa_registers_the_device(
+    hass: HomeAssistant, mock_auth: MagicMock
+) -> None:
+    """An SMS challenge leads to the code form, then to device registration."""
+    mock_auth.login.return_value = SMS_CHALLENGE
+    mock_auth.sms_2fa.return_value = TOKENS
+    mock_auth.get_device_data.return_value = DEVICE_DATA
+    result = await _start_user_flow(hass)
 
+    result = await _submit(hass, result, LOGIN)
     assert result["type"] is FlowResultType.FORM
-    assert result["errors"] == {}
+    assert result["step_id"] == CONF_CODE
 
-    with patch(
-        "custom_components.hive.config_flow.Auth.login",
-        return_value={
-            "ChallengeName": "SMS_MFA",
-        },
-    ):
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {
-                CONF_USERNAME: USERNAME,
-                CONF_PASSWORD: PASSWORD,
-            },
-        )
+    result = await _submit(hass, result, {CONF_CODE: MFA_CODE})
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "configuration"
+
+    result = await _submit(hass, result, {CONF_DEVICE_NAME: DEVICE_NAME})
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"] == {**LOGIN, "tokens": TOKENS, "device_data": DEVICE_DATA}
+    mock_auth.sms_2fa.assert_awaited_once_with(MFA_CODE, SMS_CHALLENGE)
+    mock_auth.device_registration.assert_awaited_once_with(DEVICE_NAME)
+
+
+async def test_entering_0000_requests_a_new_code(
+    hass: HomeAssistant, mock_auth: MagicMock
+) -> None:
+    """The code 0000 logs in again so Hive sends another SMS, and stays on the code form."""
+    mock_auth.login.return_value = SMS_CHALLENGE
+    result = await _start_user_flow(hass)
+    result = await _submit(hass, result, LOGIN)
+
+    result = await _submit(hass, result, {CONF_CODE: RESEND_CODE})
 
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == CONF_CODE
     assert result["errors"] == {}
-
-    with patch(
-        "custom_components.hive.config_flow.Auth.sms_2fa",
-        return_value={
-            "ChallengeName": "SUCCESS",
-            "AuthenticationResult": {
-                "RefreshToken": "mock-refresh-token",
-                "AccessToken": "mock-access-token",
-            },
-        },
-    ):
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {
-                CONF_CODE: MFA_CODE,
-            },
-        )
-
-    assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "configuration"
-    assert result["errors"] == {}
-
-    with (
-        patch(
-            "custom_components.hive.config_flow.Auth.device_registration",
-            return_value=True,
-        ),
-        patch(
-            "custom_components.hive.config_flow.Auth.get_device_data",
-            return_value=[
-                "mock-device-group-key",
-                "mock-device-key",
-                "mock-device-password",
-            ],
-        ),
-        patch(
-            "custom_components.hive.async_setup_entry",
-            return_value=True,
-        ) as mock_setup_entry,
-    ):
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {
-                CONF_DEVICE_NAME: DEVICE_NAME,
-            },
-        )
-        await hass.async_block_till_done()
-
-    assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["title"] == USERNAME
-    assert result["data"] == {
-        CONF_USERNAME: USERNAME,
-        CONF_PASSWORD: PASSWORD,
-        "tokens": {
-            "AuthenticationResult": {
-                "AccessToken": "mock-access-token",
-                "RefreshToken": "mock-refresh-token",
-            },
-            "ChallengeName": "SUCCESS",
-        },
-        "device_data": [
-            "mock-device-group-key",
-            "mock-device-key",
-            "mock-device-password",
-        ],
-    }
-
-    assert len(mock_setup_entry.mock_calls) == 1
-    assert len(hass.config_entries.async_entries(DOMAIN)) == 1
+    assert mock_auth.login.await_count == 2
+    mock_auth.sms_2fa.assert_not_awaited()
 
 
-async def test_reauth_flow(hass: HomeAssistant) -> None:
-    """Test the reauth flow."""
-
-    mock_config = MockConfigEntry(
+@pytest.mark.usefixtures("mock_setup_entry")
+async def test_reauth_updates_the_password(
+    hass: HomeAssistant, mock_auth: MagicMock
+) -> None:
+    """Reauth shows the rejected password as an error, then saves the new one."""
+    entry = MockConfigEntry(
         domain=DOMAIN,
         unique_id=USERNAME,
-        data={
-            CONF_USERNAME: USERNAME,
-            CONF_PASSWORD: INCORRECT_PASSWORD,
-            "tokens": {
-                "AccessToken": "mock-access-token",
-                "RefreshToken": "mock-refresh-token",
-            },
-        },
+        data={**ENTRY_DATA, CONF_PASSWORD: "incorrect-password"},
     )
-    mock_config.add_to_hass(hass)
+    entry.add_to_hass(hass)
+    mock_auth.login.side_effect = [HiveInvalidPassword(), TOKENS]
 
-    with patch(
-        "custom_components.hive.config_flow.Auth.login",
-        side_effect=HiveInvalidPassword(),
-    ):
-        result = await mock_config.start_reauth_flow(hass)
-
+    result = await entry.start_reauth_flow(hass)
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {"base": "invalid_password"}
 
-    with patch(
-        "custom_components.hive.config_flow.Auth.login",
-        return_value={
-            "ChallengeName": "SUCCESS",
-            "AuthenticationResult": {
-                "RefreshToken": "mock-refresh-token",
-                "AccessToken": "mock-access-token",
-            },
-        },
-    ):
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {
-                CONF_USERNAME: USERNAME,
-                CONF_PASSWORD: UPDATED_PASSWORD,
-            },
-        )
-    await hass.async_block_till_done()
-
-    assert mock_config.data.get("username") == USERNAME
-    assert mock_config.data.get("password") == UPDATED_PASSWORD
-    assert result["type"] is FlowResultType.ABORT
-    assert result["reason"] == "reauth_successful"
-    assert len(hass.config_entries.async_entries(DOMAIN)) == 1
-
-
-async def test_reauth_2fa_flow(hass: HomeAssistant) -> None:
-    """Test the reauth 2FA flow when the device is still registered."""
-
-    mock_config = MockConfigEntry(
-        domain=DOMAIN,
-        unique_id=USERNAME,
-        data={
-            CONF_USERNAME: USERNAME,
-            CONF_PASSWORD: PASSWORD,
-            "tokens": {
-                "AccessToken": "mock-access-token",
-                "RefreshToken": "mock-refresh-token",
-            },
-            "device_data": [
-                "mock-device-group-key",
-                "mock-device-key",
-                "mock-device-password",
-            ],
-        },
+    result = await _submit(
+        hass, result, {CONF_USERNAME: USERNAME, CONF_PASSWORD: UPDATED_PASSWORD}
     )
-    mock_config.add_to_hass(hass)
 
-    with patch(
-        "custom_components.hive.config_flow.Auth.login",
-        return_value={
-            "ChallengeName": "SMS_MFA",
-        },
-    ):
-        result = await mock_config.start_reauth_flow(hass)
-
-    assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == CONF_CODE
-    assert result["errors"] == {}
-
-    with (
-        patch(
-            "custom_components.hive.config_flow.Auth.sms_2fa",
-            return_value={
-                "ChallengeName": "SUCCESS",
-                "AuthenticationResult": {
-                    "RefreshToken": "mock-refresh-token",
-                    "AccessToken": "mock-access-token",
-                },
-            },
-        ),
-        patch(
-            "custom_components.hive.config_flow.Auth.is_device_registered",
-            return_value=True,
-        ),
-        patch(
-            "custom_components.hive.async_setup_entry",
-            return_value=True,
-        ) as mock_setup_entry,
-    ):
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {
-                CONF_CODE: MFA_CODE,
-            },
-        )
-        await hass.async_block_till_done()
-
-    assert mock_config.data.get("username") == USERNAME
-    assert mock_config.data.get("password") == PASSWORD
-    assert mock_config.data.get("device_data") == [
-        "mock-device-group-key",
-        "mock-device-key",
-        "mock-device-password",
-    ]
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reauth_successful"
-    mock_setup_entry.assert_called_once()
-    assert len(hass.config_entries.async_entries(DOMAIN)) == 1
+    assert entry.data[CONF_PASSWORD] == UPDATED_PASSWORD
+    assert entry.data["tokens"] == TOKENS
 
 
-async def test_reauth_2fa_flow_device_not_registered(hass: HomeAssistant) -> None:
-    """Test the reauth 2FA flow when the device has been deleted from the Hive app."""
-
-    mock_config = MockConfigEntry(
-        domain=DOMAIN,
-        unique_id=USERNAME,
-        data={
-            CONF_USERNAME: USERNAME,
-            CONF_PASSWORD: PASSWORD,
-            "tokens": {
-                "AccessToken": "mock-access-token",
-                "RefreshToken": "mock-refresh-token",
-            },
-        },
-    )
-    mock_config.add_to_hass(hass)
-
-    with patch(
-        "custom_components.hive.config_flow.Auth.login",
-        return_value={
-            "ChallengeName": "SMS_MFA",
-        },
-    ):
-        result = await mock_config.start_reauth_flow(hass)
-
-    assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == CONF_CODE
-    assert result["errors"] == {}
-
-    with (
-        patch(
-            "custom_components.hive.config_flow.Auth.sms_2fa",
-            return_value={
-                "ChallengeName": "SUCCESS",
-                "AuthenticationResult": {
-                    "RefreshToken": "mock-refresh-token",
-                    "AccessToken": "mock-access-token",
-                },
-            },
-        ),
-        patch(
-            "custom_components.hive.config_flow.Auth.is_device_registered",
-            return_value=False,
-        ),
-    ):
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {
-                CONF_CODE: MFA_CODE,
-            },
-        )
-
-    assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "configuration"
-    assert result["errors"] == {}
-
-    with (
-        patch(
-            "custom_components.hive.config_flow.Auth.device_registration",
-            return_value=True,
-        ),
-        patch(
-            "custom_components.hive.config_flow.Auth.get_device_data",
-            return_value=[
-                "mock-device-group-key",
-                "mock-device-key",
-                "mock-device-password",
-            ],
-        ),
-        patch(
-            "custom_components.hive.async_setup_entry",
-            return_value=True,
-        ) as mock_setup_entry,
-    ):
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {
-                CONF_DEVICE_NAME: DEVICE_NAME,
-            },
-        )
-        await hass.async_block_till_done()
-
-    assert mock_config.data.get("username") == USERNAME
-    assert mock_config.data.get("password") == PASSWORD
-    assert mock_config.data.get("device_data") == [
-        "mock-device-group-key",
-        "mock-device-key",
-        "mock-device-password",
-    ]
-    assert result["type"] is FlowResultType.ABORT
-    assert result["reason"] == "reauth_successful"
-    assert len(mock_setup_entry.mock_calls) == 1
-    assert len(hass.config_entries.async_entries(DOMAIN)) == 1
-
-
-async def test_reauth_2fa_flow_device_registration_check_fails(
-    hass: HomeAssistant,
+@pytest.mark.usefixtures("mock_setup_entry")
+async def test_reauth_with_2fa_keeps_a_registered_device(
+    hass: HomeAssistant, mock_auth: MagicMock
 ) -> None:
-    """Test the reauth 2FA flow when is_device_registered() cannot reach Hive."""
-
-    mock_config = MockConfigEntry(
-        domain=DOMAIN,
-        unique_id=USERNAME,
-        data={
-            CONF_USERNAME: USERNAME,
-            CONF_PASSWORD: PASSWORD,
-            "tokens": {
-                "AccessToken": "mock-access-token",
-                "RefreshToken": "mock-refresh-token",
-            },
-        },
-    )
-    mock_config.add_to_hass(hass)
-
-    with patch(
-        "custom_components.hive.config_flow.Auth.login",
-        return_value={
-            "ChallengeName": "SMS_MFA",
-        },
-    ):
-        result = await mock_config.start_reauth_flow(hass)
-
-    assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == CONF_CODE
-    assert result["errors"] == {}
-
-    with (
-        patch(
-            "custom_components.hive.config_flow.Auth.sms_2fa",
-            return_value={
-                "ChallengeName": "SUCCESS",
-                "AuthenticationResult": {
-                    "RefreshToken": "mock-refresh-token",
-                    "AccessToken": "mock-access-token",
-                },
-            },
-        ),
-        patch(
-            "custom_components.hive.config_flow.Auth.is_device_registered",
-            side_effect=HiveConnectionError(),
-        ),
-    ):
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {
-                CONF_CODE: MFA_CODE,
-            },
-        )
-
-    assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == CONF_CODE
-    assert result["errors"] == {"base": "no_internet_available"}
-
-    with (
-        patch(
-            "custom_components.hive.config_flow.Auth.sms_2fa",
-            return_value={
-                "ChallengeName": "SUCCESS",
-                "AuthenticationResult": {
-                    "RefreshToken": "mock-refresh-token",
-                    "AccessToken": "mock-access-token",
-                },
-            },
-        ),
-        patch(
-            "custom_components.hive.config_flow.Auth.is_device_registered",
-            return_value=True,
-        ),
-        patch(
-            "custom_components.hive.async_setup_entry",
-            return_value=True,
-        ) as mock_setup_entry,
-    ):
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {
-                CONF_CODE: MFA_CODE,
-            },
-        )
-        await hass.async_block_till_done()
-
-    assert mock_config.data.get("username") == USERNAME
-    assert mock_config.data.get("password") == PASSWORD
-    assert result["type"] is FlowResultType.ABORT
-    assert result["reason"] == "reauth_successful"
-    mock_setup_entry.assert_called_once()
-    assert len(hass.config_entries.async_entries(DOMAIN)) == 1
-
-
-async def test_option_flow(hass: HomeAssistant) -> None:
-    """Test config flow options."""
-
+    """After the SMS code, a device Hive still remembers is kept as it is."""
     entry = MockConfigEntry(
         domain=DOMAIN,
-        title=USERNAME,
-        data={
-            CONF_USERNAME: USERNAME,
-            CONF_PASSWORD: PASSWORD,
-            "device_data": [
-                "mock-device-group-key",
-                "mock-device-key",
-                "mock-device-password",
-            ],
-        },
+        unique_id=USERNAME,
+        data={**ENTRY_DATA, "device_data": DEVICE_DATA},
     )
     entry.add_to_hass(hass)
+    mock_auth.login.return_value = SMS_CHALLENGE
+    mock_auth.sms_2fa.return_value = TOKENS
+    mock_auth.is_device_registered.return_value = True
 
-    mock_hive = MagicMock()
-    mock_hive.start_session = AsyncMock(
-        return_value={"parent": [], "climate": [], "water_heater": []}
-    )
-    mock_hive.device_list = mock_hive.start_session.return_value
-    with patch("custom_components.hive.Hive", return_value=mock_hive):
-        await hass.config_entries.async_setup(entry.entry_id)
-        await hass.async_block_till_done()
+    result = await entry.start_reauth_flow(hass)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == CONF_CODE
 
-    result = await hass.config_entries.options.async_init(
-        entry.entry_id,
-        data=None,
-    )
+    result = await _submit(hass, result, {CONF_CODE: MFA_CODE})
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    assert entry.data["device_data"] == DEVICE_DATA
+    mock_auth.device_registration.assert_not_awaited()
+
+
+@pytest.mark.usefixtures("mock_setup_entry")
+async def test_reauth_with_2fa_registers_a_forgotten_device(
+    hass: HomeAssistant, mock_auth: MagicMock
+) -> None:
+    """After the SMS code, a device deleted from the Hive app is registered again."""
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=USERNAME, data=ENTRY_DATA)
+    entry.add_to_hass(hass)
+    mock_auth.login.return_value = SMS_CHALLENGE
+    mock_auth.sms_2fa.return_value = TOKENS
+    mock_auth.is_device_registered.return_value = False
+    mock_auth.get_device_data.return_value = DEVICE_DATA
+
+    result = await entry.start_reauth_flow(hass)
+    result = await _submit(hass, result, {CONF_CODE: MFA_CODE})
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "configuration"
+
+    result = await _submit(hass, result, {CONF_DEVICE_NAME: DEVICE_NAME})
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    assert entry.data["device_data"] == DEVICE_DATA
+    mock_auth.device_registration.assert_awaited_once_with(DEVICE_NAME)
+
+
+@pytest.mark.parametrize(("error", "message"), CONNECTION_ERRORS)
+@pytest.mark.usefixtures("mock_setup_entry")
+async def test_reauth_retries_a_failed_registration_check(
+    hass: HomeAssistant, mock_auth: MagicMock, error: HiveError, message: str
+) -> None:
+    """When the device check fails, the code form is shown again with the matching error."""
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=USERNAME, data=ENTRY_DATA)
+    entry.add_to_hass(hass)
+    mock_auth.login.return_value = SMS_CHALLENGE
+    mock_auth.sms_2fa.return_value = TOKENS
+    mock_auth.is_device_registered.side_effect = [error, True]
+
+    result = await entry.start_reauth_flow(hass)
+    result = await _submit(hass, result, {CONF_CODE: MFA_CODE})
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == CONF_CODE
+    assert result["errors"] == {"base": message}
+
+    result = await _submit(hass, result, {CONF_CODE: MFA_CODE})
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+
+
+@pytest.mark.parametrize(("error", "message"), LOGIN_ERRORS)
+async def test_login_error_is_shown_on_the_form(
+    hass: HomeAssistant, mock_auth: MagicMock, error: HiveError, message: str
+) -> None:
+    """A failed login keeps the login form open with the matching error."""
+    mock_auth.login.side_effect = error
+    result = await _start_user_flow(hass)
+
+    result = await _submit(hass, result, LOGIN)
 
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "user"
-
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], user_input={CONF_SCAN_INTERVAL: UPDATED_SCAN_INTERVAL}
-    )
-
-    assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["data"][CONF_SCAN_INTERVAL] == UPDATED_SCAN_INTERVAL
-    mock_hive.update_interval.assert_called_once_with(UPDATED_SCAN_INTERVAL)
+    assert result["errors"] == {"base": message}
 
 
-async def test_user_flow_2fa_send_new_code(hass: HomeAssistant) -> None:
-    """Resend a 2FA code if it didn't arrive."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
+@pytest.mark.parametrize(("error", "message"), TWO_FACTOR_ERRORS)
+async def test_2fa_error_is_shown_on_the_form(
+    hass: HomeAssistant, mock_auth: MagicMock, error: HiveError, message: str
+) -> None:
+    """A rejected code or an unreachable Hive keeps the code form open with the matching error."""
+    mock_auth.login.return_value = SMS_CHALLENGE
+    mock_auth.sms_2fa.side_effect = error
+    result = await _start_user_flow(hass)
+    result = await _submit(hass, result, LOGIN)
 
-    assert result["type"] is FlowResultType.FORM
-    assert result["errors"] == {}
-
-    with patch(
-        "custom_components.hive.config_flow.Auth.login",
-        return_value={
-            "ChallengeName": "SMS_MFA",
-        },
-    ):
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {
-                CONF_USERNAME: USERNAME,
-                CONF_PASSWORD: PASSWORD,
-            },
-        )
+    result = await _submit(hass, result, {CONF_CODE: MFA_CODE})
 
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == CONF_CODE
-    assert result["errors"] == {}
+    assert result["errors"] == {"base": message}
 
-    with patch(
-        "custom_components.hive.config_flow.Auth.login",
-        return_value={
-            "ChallengeName": "SMS_MFA",
-        },
-    ):
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"], {CONF_CODE: MFA_RESEND_CODE}
-        )
-        await hass.async_block_till_done()
+
+@pytest.mark.parametrize(("error", "message"), CONNECTION_ERRORS)
+async def test_resend_error_is_shown_on_the_form(
+    hass: HomeAssistant, mock_auth: MagicMock, error: HiveError, message: str
+) -> None:
+    """A failed login for a new code keeps the code form open with the matching error."""
+    mock_auth.login.side_effect = [SMS_CHALLENGE, error]
+    result = await _start_user_flow(hass)
+    result = await _submit(hass, result, LOGIN)
+
+    result = await _submit(hass, result, {CONF_CODE: RESEND_CODE})
 
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == CONF_CODE
-    assert result["errors"] == {}
+    assert result["errors"] == {"base": message}
 
-    with patch(
-        "custom_components.hive.config_flow.Auth.sms_2fa",
-        return_value={
-            "ChallengeName": "SUCCESS",
-            "AuthenticationResult": {
-                "RefreshToken": "mock-refresh-token",
-                "AccessToken": "mock-access-token",
-            },
-        },
-    ):
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {
-                CONF_CODE: MFA_CODE,
-            },
-        )
+
+@pytest.mark.parametrize(("error", "message"), CONNECTION_ERRORS)
+async def test_registration_error_is_shown_on_the_form(
+    hass: HomeAssistant, mock_auth: MagicMock, error: HiveError, message: str
+) -> None:
+    """A failed device registration keeps the name form open and saves no device data."""
+    mock_auth.login.return_value = TOKENS_FOR_NEW_DEVICE
+    mock_auth.device_registration.side_effect = error
+    result = await _start_user_flow(hass)
+    result = await _submit(hass, result, LOGIN)
+
+    result = await _submit(hass, result, {CONF_DEVICE_NAME: DEVICE_NAME})
 
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "configuration"
-    assert result["errors"] == {}
-
-    with (
-        patch(
-            "custom_components.hive.config_flow.Auth.device_registration",
-            return_value=True,
-        ),
-        patch(
-            "custom_components.hive.config_flow.Auth.get_device_data",
-            return_value=[
-                "mock-device-group-key",
-                "mock-device-key",
-                "mock-device-password",
-            ],
-        ),
-        patch(
-            "custom_components.hive.async_setup_entry",
-            return_value=True,
-        ) as mock_setup_entry,
-    ):
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"], {CONF_DEVICE_NAME: DEVICE_NAME}
-        )
-        await hass.async_block_till_done()
-
-    assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["title"] == USERNAME
-    assert result["data"] == {
-        CONF_USERNAME: USERNAME,
-        CONF_PASSWORD: PASSWORD,
-        "tokens": {
-            "AuthenticationResult": {
-                "AccessToken": "mock-access-token",
-                "RefreshToken": "mock-refresh-token",
-            },
-            "ChallengeName": "SUCCESS",
-        },
-        "device_data": [
-            "mock-device-group-key",
-            "mock-device-key",
-            "mock-device-password",
-        ],
-    }
-    assert len(mock_setup_entry.mock_calls) == 1
-    assert len(hass.config_entries.async_entries(DOMAIN)) == 1
+    assert result["errors"] == {"base": message}
+    mock_auth.get_device_data.assert_not_called()
 
 
-async def test_abort_if_existing_entry(hass: HomeAssistant) -> None:
-    """Check flow abort when an entry already exist."""
-    config_entry = MockConfigEntry(
-        domain=DOMAIN,
-        unique_id=USERNAME,
-        data={CONF_USERNAME: USERNAME, CONF_PASSWORD: PASSWORD},
-        options={CONF_SCAN_INTERVAL: SCAN_INTERVAL},
-    )
-    config_entry.add_to_hass(hass)
+async def test_login_without_tokens_is_an_unknown_error(
+    hass: HomeAssistant, mock_auth: MagicMock
+) -> None:
+    """A login that completes no challenge and returns no tokens is an unknown error."""
+    mock_auth.login.return_value = NO_TOKENS
+    result = await _start_user_flow(hass)
 
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
+    result = await _submit(hass, result, LOGIN)
 
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "user"
+    assert result["errors"] == {"base": "unknown"}
 
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"],
-        user_input={
-            CONF_USERNAME: USERNAME.upper(),
-            CONF_PASSWORD: PASSWORD,
-        },
+
+async def test_2fa_without_tokens_fails_at_configuration(
+    hass: HomeAssistant, mock_auth: MagicMock
+) -> None:
+    """A code response without tokens still reaches the name form, which then fails."""
+    mock_auth.login.return_value = SMS_CHALLENGE
+    mock_auth.sms_2fa.return_value = NO_TOKENS
+    mock_auth.get_device_data.return_value = DEVICE_DATA
+    result = await _start_user_flow(hass)
+    result = await _submit(hass, result, LOGIN)
+    result = await _submit(hass, result, {CONF_CODE: MFA_CODE})
+    assert result["step_id"] == "configuration"
+
+    result = await _submit(hass, result, {CONF_DEVICE_NAME: DEVICE_NAME})
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "configuration"
+    assert result["errors"] == {"base": "unknown"}
+
+
+async def test_second_entry_for_the_account_is_aborted(
+    hass: HomeAssistant, mock_auth: MagicMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """An account that already has an entry is not logged in to again, whatever the letter case."""
+    mock_config_entry.add_to_hass(hass)
+    result = await _start_user_flow(hass)
+
+    result = await _submit(
+        hass, result, {CONF_USERNAME: USERNAME.upper(), CONF_PASSWORD: PASSWORD}
     )
 
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
+    mock_auth.login.assert_not_awaited()
 
 
-async def test_user_flow_invalid_username(hass: HomeAssistant) -> None:
-    """Test user flow with invalid username."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
-
-    assert result["type"] is FlowResultType.FORM
-    assert result["errors"] == {}
-
-    with patch(
-        "custom_components.hive.config_flow.Auth.login",
-        side_effect=HiveInvalidUsername(),
-    ):
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {CONF_USERNAME: USERNAME, CONF_PASSWORD: PASSWORD},
-        )
-
+async def test_options_flow_sets_the_scan_interval(
+    hass: HomeAssistant, mock_hive: MagicMock, mock_config_entry: MockConfigEntry
+) -> None:
+    """Saving the options passes the new interval to the running session."""
+    await setup_entry(hass, mock_config_entry)
+    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "user"
-    assert result["errors"] == {"base": "invalid_username"}
 
-
-async def test_user_flow_invalid_password(hass: HomeAssistant) -> None:
-    """Test user flow with invalid password."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input={CONF_SCAN_INTERVAL: 60}
     )
 
-    assert result["type"] is FlowResultType.FORM
-    assert result["errors"] == {}
-
-    with patch(
-        "custom_components.hive.config_flow.Auth.login",
-        side_effect=HiveInvalidPassword(),
-    ):
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {CONF_USERNAME: USERNAME, CONF_PASSWORD: PASSWORD},
-        )
-
-    assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "user"
-    assert result["errors"] == {"base": "invalid_password"}
-
-
-async def test_user_flow_no_internet_connection(hass: HomeAssistant) -> None:
-    """Test user flow with no internet connection."""
-
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
-
-    assert result["type"] is FlowResultType.FORM
-    assert result["errors"] == {}
-
-    with patch(
-        "custom_components.hive.config_flow.Auth.login",
-        side_effect=HiveConnectionError(),
-    ):
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {CONF_USERNAME: USERNAME, CONF_PASSWORD: PASSWORD},
-        )
-
-    assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "user"
-    assert result["errors"] == {"base": "no_internet_available"}
-
-
-async def test_user_flow_hive_refuses_login(hass: HomeAssistant) -> None:
-    """Test user flow when Hive refuses the login, which is not a connectivity error."""
-
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
-
-    assert result["type"] is FlowResultType.FORM
-    assert result["errors"] == {}
-
-    with patch(
-        "custom_components.hive.config_flow.Auth.login",
-        side_effect=HiveApiError(
-            "Unsupported Cognito challenge: NEW_PASSWORD_REQUIRED"
-        ),
-    ):
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {CONF_USERNAME: USERNAME, CONF_PASSWORD: PASSWORD},
-        )
-
-    assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "user"
-    assert result["errors"] == {"base": "unknown"}
-
-
-async def test_user_flow_2fa_no_internet_connection(hass: HomeAssistant) -> None:
-    """Test user flow with no internet connection."""
-
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
-
-    assert result["type"] is FlowResultType.FORM
-    assert result["errors"] == {}
-
-    with patch(
-        "custom_components.hive.config_flow.Auth.login",
-        return_value={
-            "ChallengeName": "SMS_MFA",
-        },
-    ):
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {CONF_USERNAME: USERNAME, CONF_PASSWORD: PASSWORD},
-        )
-
-    assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == CONF_CODE
-    assert result["errors"] == {}
-
-    with patch(
-        "custom_components.hive.config_flow.Auth.sms_2fa",
-        side_effect=HiveConnectionError(),
-    ):
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {CONF_CODE: MFA_CODE},
-        )
-
-    assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == CONF_CODE
-    assert result["errors"] == {"base": "no_internet_available"}
-
-
-async def test_user_flow_2fa_invalid_code(hass: HomeAssistant) -> None:
-    """Test user flow with 2FA."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
-
-    assert result["type"] is FlowResultType.FORM
-    assert result["errors"] == {}
-
-    with patch(
-        "custom_components.hive.config_flow.Auth.login",
-        return_value={
-            "ChallengeName": "SMS_MFA",
-        },
-    ):
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {CONF_USERNAME: USERNAME, CONF_PASSWORD: PASSWORD},
-        )
-
-    assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == CONF_CODE
-    assert result["errors"] == {}
-
-    with patch(
-        "custom_components.hive.config_flow.Auth.sms_2fa",
-        side_effect=HiveInvalid2FACode(),
-    ):
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {CONF_CODE: MFA_INVALID_CODE},
-        )
-    assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == CONF_CODE
-    assert result["errors"] == {"base": "invalid_code"}
-
-
-async def test_user_flow_unknown_error(hass: HomeAssistant) -> None:
-    """Test user flow when unknown error occurs."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
-
-    assert result["type"] is FlowResultType.FORM
-    assert result["errors"] == {}
-
-    with patch(
-        "custom_components.hive.config_flow.Auth.login",
-        return_value={"ChallengeName": "FAILED", "InvalidAuthenticationResult": {}},
-    ):
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {CONF_USERNAME: USERNAME, CONF_PASSWORD: PASSWORD},
-        )
-        await hass.async_block_till_done()
-
-    assert result["type"] is FlowResultType.FORM
-    assert result["errors"] == {"base": "unknown"}
-
-
-async def test_user_flow_2fa_unknown_error(hass: HomeAssistant) -> None:
-    """Test 2fa flow when unknown error occurs."""
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
-
-    assert result["type"] is FlowResultType.FORM
-    assert result["errors"] == {}
-
-    with patch(
-        "custom_components.hive.config_flow.Auth.login",
-        return_value={
-            "ChallengeName": "SMS_MFA",
-        },
-    ):
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {CONF_USERNAME: USERNAME, CONF_PASSWORD: PASSWORD},
-        )
-
-    assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == CONF_CODE
-
-    with patch(
-        "custom_components.hive.config_flow.Auth.sms_2fa",
-        return_value={"ChallengeName": "FAILED", "InvalidAuthenticationResult": {}},
-    ):
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {CONF_CODE: MFA_CODE},
-        )
-
-    assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "configuration"
-    assert result["errors"] == {}
-
-    with (
-        patch(
-            "custom_components.hive.config_flow.Auth.device_registration",
-            return_value=True,
-        ),
-        patch(
-            "custom_components.hive.config_flow.Auth.get_device_data",
-            return_value=[
-                "mock-device-group-key",
-                "mock-device-key",
-                "mock-device-password",
-            ],
-        ),
-    ):
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"],
-            {CONF_DEVICE_NAME: DEVICE_NAME},
-        )
-        await hass.async_block_till_done()
-
-    assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "configuration"
-    assert result["errors"] == {"base": "unknown"}
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"] == {CONF_SCAN_INTERVAL: 60}
+    mock_hive.update_interval.assert_called_once_with(60)
