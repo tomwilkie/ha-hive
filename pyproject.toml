@@ -8,7 +8,8 @@ dependencies = []
 [dependency-groups]
 dev = [
     "pytest-homeassistant-custom-component==0.13.373",
-    "pyhive-integration==1.0.10",
+    # Keep in step with the requirement in custom_components/hive/manifest.json.
+    "pyhive-integration @ https://github.com/tomwilkie/pyhive-integration/releases/download/v0.0.1/pyhive_integration-0.0.1-py3-none-any.whl",
 ]
 
 [tool.pytest.ini_options]

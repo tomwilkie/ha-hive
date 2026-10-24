@@ -1,13 +1,13 @@
 # ha-hive
 
-A custom Home Assistant integration for [Hive](https://www.hivehome.com/) heating, hot water,
-lights and plugs, forked from the built-in `hive` integration in
+A custom Home Assistant integration for [Hive](https://www.hivehome.com/) heating and hot water,
+forked from the built-in `hive` integration in
 [home-assistant/core](https://github.com/home-assistant/core/tree/dev/homeassistant/components/hive).
 
 The goal is a simpler, more robust integration: bounded timeouts, retries that Home Assistant can
 see, and errors that propagate instead of being swallowed. The Hive API client lives in
-[tomwilkie/Pyhive](https://github.com/tomwilkie/Pyhive), a fork of
-[Pyhass/Pyhive](https://github.com/Pyhass/Pyhive).
+[tomwilkie/pyhive-integration](https://github.com/tomwilkie/pyhive-integration), a hard fork of
+[Pyhass/Pyhive](https://github.com/Pyhass/Pyhive) installed from its GitHub releases.
 
 ## Provenance
 
@@ -25,6 +25,10 @@ existing config entry, devices and entity IDs.
    **Integration**, then install **Hive**.
 2. Restart Home Assistant. The log shows `We found a custom integration hive which has not been
    tested by Home Assistant`, which confirms that the override loaded.
+
+Only the climate and water heater platforms are provided. The light, switch, sensor and binary
+sensor entities the built-in integration created become unavailable and can be deleted from their
+device pages.
 
 To go back to the built-in integration, remove it in HACS and restart.
 

@@ -1,8 +1,8 @@
 """Support for the Hive devices and services."""
 
-from typing import TYPE_CHECKING, Any, override
+from typing import TYPE_CHECKING, override
 
-from apyhiveapi import Hive
+from apyhiveapi import Device, Hive
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
@@ -24,30 +24,34 @@ class HiveEntity(Entity):
         hass: HomeAssistant,
         entry: HiveConfigEntry,
         hive: Hive,
-        hive_device: dict[str, Any],
+        hive_device: Device,
     ) -> None:
         """Initialize the instance."""
         self.hive = hive
         self.device = hive_device
-        self._attr_name = self.device["haName"]
-        self._attr_unique_id = f"{self.device['hiveID']}-{self.device['hiveType']}"
+        self._attr_name = self.device["ha_name"]
+        self._attr_unique_id = f"{self.device['hive_id']}-{self.device['hive_type']}"
         device_id = self.device["device_id"]
+        # A product with no device of its own carries its own props, which
+        # lack the manufacturer.
+        device_data = self.device["device_data"]
         device_info = DeviceInfo(
             identifiers={(DOMAIN, device_id)},
-            model=self.device["deviceData"]["model"],
-            manufacturer=self.device["deviceData"]["manufacturer"],
+            model=device_data.get("model"),
+            manufacturer=device_data.get("manufacturer"),
             name=self.device["device_name"],
-            sw_version=self.device["deviceData"]["version"],
+            sw_version=device_data.get("version"),
         )
-        # Hive reports the hub itself as its parent.
-        if self.device["parentDevice"] != device_id:
+        # Hive reports the hub itself as its parent, and no parent at all
+        # when it did not report a hub.
+        parent_device = self.device["parent_device"]
+        if parent_device and parent_device != device_id:
             device_info["via_device_id"] = dr.async_get_device_id_by_identifier(
                 hass,
-                (DOMAIN, self.device["parentDevice"]),
+                (DOMAIN, parent_device),
                 config_entry_id=entry.entry_id,
             )
         self._attr_device_info = device_info
-        self.attributes: dict[str, Any] = {}
 
     @override
     async def async_added_to_hass(self) -> None:

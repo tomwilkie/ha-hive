@@ -50,7 +50,7 @@ async def async_setup_entry(
     """Set up Hive thermostat based on a config entry."""
 
     hive = entry.runtime_data
-    devices = hive.session.deviceList.get("water_heater")
+    devices = hive.device_list.get("water_heater")
     if devices:
         async_add_entities(
             (HiveWaterHeater(hass, entry, hive, dev) for dev in devices), True
@@ -85,35 +85,36 @@ class HiveWaterHeater(HiveEntity, WaterHeaterEntity):
     @override
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on hotwater."""
-        await self.hive.hotwater.setMode(self.device, "MANUAL")
+        await self.hive.hotwater.set_mode(self.device, "MANUAL")
 
     @refresh_system
     @override
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn on hotwater."""
-        await self.hive.hotwater.setMode(self.device, "OFF")
+        await self.hive.hotwater.set_mode(self.device, "OFF")
 
     @refresh_system
     @override
     async def async_set_operation_mode(self, operation_mode: str) -> None:
         """Set operation mode."""
         new_mode = HASS_TO_HIVE_STATE[operation_mode]
-        await self.hive.hotwater.setMode(self.device, new_mode)
+        await self.hive.hotwater.set_mode(self.device, new_mode)
 
     @refresh_system
     async def async_hot_water_boost(self, time_period: int, on_off: str) -> None:
         """Handle the service call."""
         if on_off == "on":
-            await self.hive.hotwater.setBoostOn(self.device, time_period)
+            await self.hive.hotwater.set_boost_on(self.device, time_period)
         elif on_off == "off":
-            await self.hive.hotwater.setBoostOff(self.device)
+            await self.hive.hotwater.set_boost_off(self.device)
 
     async def async_update(self) -> None:
         """Update all Node data from Hive."""
-        await self.hive.session.updateData(self.device)
-        self.device = await self.hive.hotwater.getWaterHeater(self.device)
-        self._attr_available = self.device["deviceData"].get("online")
+        await self.hive.update_data()
+        self.device = await self.hive.hotwater.get_water_heater(self.device)
+        self._attr_available = self.device["device_data"].get("online")
         if self._attr_available:
-            self._attr_current_operation = HIVE_TO_HASS_STATE[
+            # The library reports None when Hive did not say.
+            self._attr_current_operation = HIVE_TO_HASS_STATE.get(
                 self.device["status"]["current_operation"]
-            ]
+            )

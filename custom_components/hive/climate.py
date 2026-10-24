@@ -4,7 +4,7 @@ from datetime import timedelta
 import logging
 from typing import Any, override
 
-from apyhiveapi import Hive
+from apyhiveapi import Device, Hive
 import probatio
 
 from homeassistant.components.climate import (
@@ -59,7 +59,7 @@ async def async_setup_entry(
     """Set up Hive thermostat based on a config entry."""
 
     hive = entry.runtime_data
-    devices = hive.session.deviceList.get("climate")
+    devices = hive.device_list.get("climate")
     if devices:
         async_add_entities(
             (HiveClimateEntity(hass, entry, hive, dev) for dev in devices), True
@@ -104,19 +104,22 @@ class HiveClimateEntity(HiveEntity, ClimateEntity):
         hass: HomeAssistant,
         entry: HiveConfigEntry,
         hive: Hive,
-        hive_device: dict[str, Any],
+        hive_device: Device,
     ) -> None:
         """Initialize the Climate device."""
         super().__init__(hass, entry, hive, hive_device)
         self.thermostat_node_id = hive_device["device_id"]
-        self._attr_temperature_unit = TEMP_UNIT[hive_device["temperatureunit"]]
+        # Hive reports no unit when the account has none set.
+        self._attr_temperature_unit = TEMP_UNIT.get(
+            hive_device["temperature_unit"], UnitOfTemperature.CELSIUS
+        )
 
     @refresh_system
     @override
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new target hvac mode."""
         new_mode = HASS_TO_HIVE_STATE[hvac_mode]
-        await self.hive.heating.setMode(self.device, new_mode)
+        await self.hive.heating.set_mode(self.device, new_mode)
 
     @refresh_system
     @override
@@ -124,34 +127,34 @@ class HiveClimateEntity(HiveEntity, ClimateEntity):
         """Set new target temperature."""
         new_temperature = kwargs.get(ATTR_TEMPERATURE)
         if new_temperature is not None:
-            await self.hive.heating.setTargetTemperature(self.device, new_temperature)
+            await self.hive.heating.set_target_temperature(self.device, new_temperature)
 
     @refresh_system
     @override
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set new preset mode."""
         if preset_mode == PRESET_NONE and self.preset_mode == PRESET_BOOST:
-            await self.hive.heating.setBoostOff(self.device)
+            await self.hive.heating.set_boost_off(self.device)
         elif preset_mode == PRESET_BOOST:
             curtemp = round((self.current_temperature or 0) * 2) / 2
             temperature = curtemp + 0.5
-            await self.hive.heating.setBoostOn(self.device, 30, temperature)
+            await self.hive.heating.set_boost_on(self.device, 30, temperature)
 
     @refresh_system
     async def async_heating_boost_on(self, time_period, temperature):
         """Handle boost heating service call."""
-        await self.hive.heating.setBoostOn(self.device, time_period, temperature)
+        await self.hive.heating.set_boost_on(self.device, time_period, temperature)
 
     @refresh_system
     async def async_heating_boost_off(self) -> None:
         """Handle boost heating service call."""
-        await self.hive.heating.setBoostOff(self.device)
+        await self.hive.heating.set_boost_off(self.device)
 
     async def async_update(self) -> None:
         """Update all Node data from Hive."""
-        await self.hive.session.updateData(self.device)
-        self.device = await self.hive.heating.getClimate(self.device)
-        self._attr_available = self.device["deviceData"].get("online")
+        await self.hive.update_data()
+        self.device = await self.hive.heating.get_climate(self.device)
+        self._attr_available = self.device["device_data"].get("online")
         if self._attr_available:
             self._attr_hvac_mode = HIVE_TO_HASS_STATE.get(self.device["status"]["mode"])
             self._attr_hvac_action = HIVE_TO_HASS_HVAC_ACTION.get(

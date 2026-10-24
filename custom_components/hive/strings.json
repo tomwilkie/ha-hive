@@ -46,24 +46,6 @@
       }
     }
   },
-  "entity": {
-    "sensor": {
-      "heating": {
-        "state": {
-          "manual": "[%key:common::state::manual%]",
-          "off": "[%key:common::state::off%]",
-          "schedule": "Schedule"
-        }
-      },
-      "hot_water": {
-        "state": {
-          "off": "[%key:common::state::off%]",
-          "on": "[%key:common::state::on%]",
-          "schedule": "[%key:component::hive::entity::sensor::heating::state::schedule%]"
-        }
-      }
-    }
-  },
   "options": {
     "step": {
       "user": {

@@ -1,8 +1,14 @@
 """Test the Hive config flow."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from apyhiveapi.helper import hive_exceptions
+from apyhiveapi import (
+    HiveApiError,
+    HiveConnectionError,
+    HiveInvalid2FACode,
+    HiveInvalidPassword,
+    HiveInvalidUsername,
+)
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -284,7 +290,7 @@ async def test_reauth_flow(hass: HomeAssistant) -> None:
 
     with patch(
         "custom_components.hive.config_flow.Auth.login",
-        side_effect=hive_exceptions.HiveInvalidPassword(),
+        side_effect=HiveInvalidPassword(),
     ):
         result = await mock_config.start_reauth_flow(hass)
 
@@ -490,7 +496,7 @@ async def test_reauth_2fa_flow_device_not_registered(hass: HomeAssistant) -> Non
 async def test_reauth_2fa_flow_device_registration_check_fails(
     hass: HomeAssistant,
 ) -> None:
-    """Test the reauth 2FA flow when is_device_registered() raises HiveApiError."""
+    """Test the reauth 2FA flow when is_device_registered() cannot reach Hive."""
 
     mock_config = MockConfigEntry(
         domain=DOMAIN,
@@ -531,7 +537,7 @@ async def test_reauth_2fa_flow_device_registration_check_fails(
         ),
         patch(
             "custom_components.hive.config_flow.Auth.is_device_registered",
-            side_effect=hive_exceptions.HiveApiError(),
+            side_effect=HiveConnectionError(),
         ),
     ):
         result = await hass.config_entries.flow.async_configure(
@@ -599,8 +605,14 @@ async def test_option_flow(hass: HomeAssistant) -> None:
     )
     entry.add_to_hass(hass)
 
-    await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
+    mock_hive = MagicMock()
+    mock_hive.start_session = AsyncMock(
+        return_value={"parent": [], "climate": [], "water_heater": []}
+    )
+    mock_hive.device_list = mock_hive.start_session.return_value
+    with patch("custom_components.hive.Hive", return_value=mock_hive):
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
 
     result = await hass.config_entries.options.async_init(
         entry.entry_id,
@@ -616,6 +628,7 @@ async def test_option_flow(hass: HomeAssistant) -> None:
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_SCAN_INTERVAL] == UPDATED_SCAN_INTERVAL
+    mock_hive.update_interval.assert_called_once_with(UPDATED_SCAN_INTERVAL)
 
 
 async def test_user_flow_2fa_send_new_code(hass: HomeAssistant) -> None:
@@ -766,7 +779,7 @@ async def test_user_flow_invalid_username(hass: HomeAssistant) -> None:
 
     with patch(
         "custom_components.hive.config_flow.Auth.login",
-        side_effect=hive_exceptions.HiveInvalidUsername(),
+        side_effect=HiveInvalidUsername(),
     ):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
@@ -789,7 +802,7 @@ async def test_user_flow_invalid_password(hass: HomeAssistant) -> None:
 
     with patch(
         "custom_components.hive.config_flow.Auth.login",
-        side_effect=hive_exceptions.HiveInvalidPassword(),
+        side_effect=HiveInvalidPassword(),
     ):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
@@ -813,7 +826,7 @@ async def test_user_flow_no_internet_connection(hass: HomeAssistant) -> None:
 
     with patch(
         "custom_components.hive.config_flow.Auth.login",
-        side_effect=hive_exceptions.HiveApiError(),
+        side_effect=HiveConnectionError(),
     ):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
@@ -823,6 +836,32 @@ async def test_user_flow_no_internet_connection(hass: HomeAssistant) -> None:
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "user"
     assert result["errors"] == {"base": "no_internet_available"}
+
+
+async def test_user_flow_hive_refuses_login(hass: HomeAssistant) -> None:
+    """Test user flow when Hive refuses the login, which is not a connectivity error."""
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {}
+
+    with patch(
+        "custom_components.hive.config_flow.Auth.login",
+        side_effect=HiveApiError(
+            "Unsupported Cognito challenge: NEW_PASSWORD_REQUIRED"
+        ),
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_USERNAME: USERNAME, CONF_PASSWORD: PASSWORD},
+        )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "user"
+    assert result["errors"] == {"base": "unknown"}
 
 
 async def test_user_flow_2fa_no_internet_connection(hass: HomeAssistant) -> None:
@@ -852,7 +891,7 @@ async def test_user_flow_2fa_no_internet_connection(hass: HomeAssistant) -> None
 
     with patch(
         "custom_components.hive.config_flow.Auth.sms_2fa",
-        side_effect=hive_exceptions.HiveApiError(),
+        side_effect=HiveConnectionError(),
     ):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
@@ -890,7 +929,7 @@ async def test_user_flow_2fa_invalid_code(hass: HomeAssistant) -> None:
 
     with patch(
         "custom_components.hive.config_flow.Auth.sms_2fa",
-        side_effect=hive_exceptions.HiveInvalid2FACode(),
+        side_effect=HiveInvalid2FACode(),
     ):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"],
