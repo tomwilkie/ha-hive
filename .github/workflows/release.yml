@@ -1,0 +1,59 @@
+name: Release
+
+# Releases are cut from main: change `version` in custom_components/hive/
+# manifest.json and merge. This tags the merge commit `v<version>` and
+# publishes a GitHub Release with generated notes, which HACS offers as a
+# versioned install. Merging again with the same version does nothing.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - custom_components/hive/manifest.json
+
+# Least privilege: read-only by default; the release job widens it below.
+permissions:
+  contents: read
+
+# One release run at a time, in order.
+concurrency:
+  group: ${{ github.workflow }}
+
+jobs:
+  release:
+    name: Tag and release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # gh release create pushes the tag and publishes the release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          # Full history so the existing tags can be checked.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Read the version from manifest.json
+        id: version
+        run: |
+          version=$(python3 -c 'import json; print(json.load(open("custom_components/hive/manifest.json"))["version"])')
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether the version is already tagged
+        id: tag
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "Tag $TAG already exists; nothing to release."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Creates the tag on the merge commit and the release in one call.
+      - name: Create the GitHub Release
+        if: steps.tag.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --generate-notes

@@ -1,5 +1,7 @@
 # ha-hive
 
+![CI](https://github.com/tomwilkie/ha-hive/actions/workflows/ci.yml/badge.svg) ![Release](https://img.shields.io/github/v/release/tomwilkie/ha-hive) ![License](https://img.shields.io/github/license/tomwilkie/ha-hive)
+
 A custom Home Assistant integration for [Hive](https://www.hivehome.com/) heating and hot water,
 forked from the built-in `hive` integration in
 [home-assistant/core](https://github.com/home-assistant/core/tree/dev/homeassistant/components/hive).
