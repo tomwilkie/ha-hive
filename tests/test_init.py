@@ -23,6 +23,7 @@ from custom_components.hive.const import (
     SERVICE_BOOST_HEATING_ON,
     SERVICE_BOOST_HOT_WATER,
 )
+from homeassistant.components.binary_sensor import DOMAIN as BINARY_SENSOR_DOMAIN
 from homeassistant.components.climate import (
     ATTR_CURRENT_TEMPERATURE,
     ATTR_HVAC_MODE,
@@ -47,7 +48,10 @@ from homeassistant.const import (
     ATTR_TEMPERATURE,
     SERVICE_TURN_OFF,
     SERVICE_TURN_ON,
+    STATE_OFF,
+    STATE_ON,
     STATE_UNAVAILABLE,
+    STATE_UNKNOWN,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
@@ -57,6 +61,8 @@ from tests.common import (
     CLIMATE_UNIQUE_ID,
     DEVICE_DATA,
     ENTRY_DATA,
+    HEATING_BOOST_UNIQUE_ID,
+    HOT_WATER_BOOST_UNIQUE_ID,
     HUB_ID,
     THERMOSTAT_ID,
     WATER_HEATER_UNIQUE_ID,
@@ -209,6 +215,75 @@ async def test_water_heater_state_reflects_hive(
 
     entity_id = entity_registry.async_get_entity_id(
         WATER_HEATER_DOMAIN, DOMAIN, WATER_HEATER_UNIQUE_ID
+    )
+    assert entity_id
+    entity_state = hass.states.get(entity_id)
+    assert entity_state
+    assert entity_state.state == state
+
+
+@pytest.mark.parametrize(
+    ("climate", "water_heater", "unique_id", "state"),
+    [
+        pytest.param(
+            make_climate(boost="ON"),
+            make_water_heater(),
+            HEATING_BOOST_UNIQUE_ID,
+            STATE_ON,
+            id="heating-boosting",
+        ),
+        pytest.param(
+            make_climate(),
+            make_water_heater(),
+            HEATING_BOOST_UNIQUE_ID,
+            STATE_OFF,
+            id="heating-not-boosting",
+        ),
+        pytest.param(
+            make_climate(),
+            make_water_heater(boost="ON"),
+            HOT_WATER_BOOST_UNIQUE_ID,
+            STATE_ON,
+            id="hot-water-boosting",
+        ),
+        pytest.param(
+            make_climate(),
+            make_water_heater(boost=None),
+            HOT_WATER_BOOST_UNIQUE_ID,
+            STATE_UNKNOWN,
+            id="hot-water-unknown",
+        ),
+        pytest.param(
+            make_climate(),
+            make_water_heater(online=False),
+            HOT_WATER_BOOST_UNIQUE_ID,
+            STATE_UNAVAILABLE,
+            id="hot-water-offline",
+        ),
+    ],
+)
+async def test_boost_binary_sensor_reflects_hive(
+    hass: HomeAssistant,
+    entity_registry: er.EntityRegistry,
+    mock_hive: MagicMock,
+    mock_config_entry: MockConfigEntry,
+    climate: Device,
+    water_heater: Device,
+    unique_id: str,
+    state: str,
+) -> None:
+    """Each boost binary sensor reports the boost status the library gives it.
+
+    The unique IDs are core's, so the entities core created carry over.
+    """
+    mock_hive.device_list = make_devices(
+        hub=make_hub(), climate=[climate], water_heater=[water_heater]
+    )
+
+    await setup_entry(hass, mock_config_entry)
+
+    entity_id = entity_registry.async_get_entity_id(
+        BINARY_SENSOR_DOMAIN, DOMAIN, unique_id
     )
     assert entity_id
     entity_state = hass.states.get(entity_id)

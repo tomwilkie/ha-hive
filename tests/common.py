@@ -31,6 +31,8 @@ HEATING_ID = "hive-heating-id"
 HOT_WATER_ID = "hive-hotwater-id"
 CLIMATE_UNIQUE_ID = f"{HEATING_ID}-heating"
 WATER_HEATER_UNIQUE_ID = f"{HOT_WATER_ID}-hotwater"
+HEATING_BOOST_UNIQUE_ID = f"{HEATING_ID}-Heating_Boost"
+HOT_WATER_BOOST_UNIQUE_ID = f"{HOT_WATER_ID}-Hotwater_Boost"
 
 _HUB_PROPS = {"model": "Hub", "version": "1.2.3", "manufacturer": "Hive"}
 _THERMOSTAT_PROPS = {"model": "SLT3", "version": "1.2.3", "manufacturer": "Hive"}
@@ -55,7 +57,7 @@ def make_climate(
     *,
     parent_device: str | None = HUB_ID,
     online: bool = True,
-    boost: str = "OFF",
+    boost: str | None = "OFF",
 ) -> Device:
     """Return a heating zone carried by the thermostat.
 
@@ -84,7 +86,7 @@ def make_climate(
     )
 
 
-def make_water_heater(*, online: bool = True) -> Device:
+def make_water_heater(*, online: bool = True, boost: str | None = "OFF") -> Device:
     """Return the hot water, carried by the same thermostat, on its schedule."""
     return Device(
         hive_id=HOT_WATER_ID,
@@ -96,7 +98,7 @@ def make_water_heater(*, online: bool = True) -> Device:
         device_data={**_THERMOSTAT_PROPS, "online": online},
         parent_device=HUB_ID,
         ha_name="Hot Water",
-        status={"current_operation": "SCHEDULE"},
+        status={"current_operation": "SCHEDULE", "boost": boost},
     )
 
 

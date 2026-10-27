@@ -10,6 +10,7 @@ CONFIG_ENTRY_VERSION = 1
 DEFAULT_NAME = "Hive"
 DOMAIN = "hive"
 PLATFORMS = [
+    Platform.BINARY_SENSOR,
     Platform.CLIMATE,
     Platform.WATER_HEATER,
 ]
