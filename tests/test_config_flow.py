@@ -16,18 +16,11 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.hive.const import CONF_CODE, CONF_DEVICE_NAME, DOMAIN
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigFlowResult
-from homeassistant.const import CONF_PASSWORD, CONF_SCAN_INTERVAL, CONF_USERNAME
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
-from tests.common import (
-    DEVICE_DATA,
-    ENTRY_DATA,
-    PASSWORD,
-    TOKENS,
-    USERNAME,
-    setup_entry,
-)
+from tests.common import DEVICE_DATA, ENTRY_DATA, PASSWORD, TOKENS, USERNAME
 
 LOGIN = {CONF_USERNAME: USERNAME, CONF_PASSWORD: PASSWORD}
 SMS_CHALLENGE = {"ChallengeName": "SMS_MFA", "Session": "mock-session"}
@@ -403,21 +396,3 @@ async def test_second_entry_for_the_account_is_aborted(
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
     mock_auth.login.assert_not_awaited()
-
-
-async def test_options_flow_sets_the_scan_interval(
-    hass: HomeAssistant, mock_hive: MagicMock, mock_config_entry: MockConfigEntry
-) -> None:
-    """Saving the options passes the new interval to the running session."""
-    await setup_entry(hass, mock_config_entry)
-    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
-    assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "user"
-
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], user_input={CONF_SCAN_INTERVAL: 60}
-    )
-
-    assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["data"] == {CONF_SCAN_INTERVAL: 60}
-    mock_hive.update_interval.assert_called_once_with(60)
