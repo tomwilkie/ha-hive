@@ -46,24 +46,6 @@
       }
     }
   },
-  "entity": {
-    "sensor": {
-      "heating": {
-        "state": {
-          "manual": "Manual",
-          "off": "Off",
-          "schedule": "Schedule"
-        }
-      },
-      "hot_water": {
-        "state": {
-          "off": "Off",
-          "on": "On",
-          "schedule": "Schedule"
-        }
-      }
-    }
-  },
   "options": {
     "step": {
       "user": {

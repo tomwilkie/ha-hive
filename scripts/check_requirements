@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Install the integration's requirements the way Home Assistant does.
+#
+# Home Assistant installs an integration's manifest `requirements` with uv,
+# constrained by the package_constraints.txt of the running release. A
+# requirement that cannot be resolved under those pins fails at startup with
+# RequirementsNotFound, which no test in this repository can see. This script
+# reproduces that install in a throwaway venv for the Home Assistant release
+# named in hacs.json, then imports the library from it.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+ha_version=$(python3 -c 'import json; print(json.load(open("hacs.json"))["homeassistant"])')
+constraints="https://raw.githubusercontent.com/home-assistant/core/${ha_version}/homeassistant/package_constraints.txt"
+
+workdir=$(mktemp -d)
+trap 'rm -rf "$workdir"' EXIT
+
+python3 -c 'import json; print("\n".join(json.load(open("custom_components/hive/manifest.json"))["requirements"]))' > "$workdir/requirements.txt"
+curl --fail --silent --show-error --location "$constraints" --output "$workdir/constraints.txt"
+
+echo "Installing under the Home Assistant ${ha_version} constraints:"
+cat "$workdir/requirements.txt"
+uv venv --quiet --python 3.14 "$workdir/venv"
+uv pip install --quiet --python "$workdir/venv/bin/python" --constraint "$workdir/constraints.txt" --requirement "$workdir/requirements.txt"
+"$workdir/venv/bin/python" -c 'import apyhiveapi; print(f"apyhiveapi imported from {apyhiveapi.__file__}")'

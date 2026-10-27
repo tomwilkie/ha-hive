@@ -1,1 +1,1 @@
-"""Tests for hive."""
+"""Tests for the Hive integration."""

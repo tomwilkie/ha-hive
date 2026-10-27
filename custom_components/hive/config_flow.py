@@ -4,9 +4,11 @@ from collections.abc import Mapping
 import logging
 from typing import Any, override
 
-from apyhiveapi import Auth
-from apyhiveapi.helper.hive_exceptions import (
-    HiveApiError,
+from apyhiveapi import (
+    SMS_REQUIRED,
+    Auth,
+    HiveConnectionError,
+    HiveError,
     HiveInvalid2FACode,
     HiveInvalidPassword,
     HiveInvalidUsername,
@@ -68,8 +70,11 @@ class HiveFlowHandler(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "invalid_username"
             except HiveInvalidPassword:
                 errors["base"] = "invalid_password"
-            except HiveApiError:
+            except HiveConnectionError:
                 errors["base"] = "no_internet_available"
+            except HiveError as err:
+                _LOGGER.error("Hive login failed: %s", err)
+                errors["base"] = "unknown"
 
             if (
                 auth_result := self.tokens.get("AuthenticationResult", {})
@@ -78,7 +83,7 @@ class HiveFlowHandler(ConfigFlow, domain=DOMAIN):
                 self.device_registration = True
                 return await self.async_step_configuration()
 
-            if self.tokens.get("ChallengeName") == "SMS_MFA":
+            if self.tokens.get("ChallengeName") == SMS_REQUIRED:
                 _LOGGER.debug("Login successful, SMS 2FA required")
                 # Complete SMS 2FA.
                 return await self.async_step_2fa()
@@ -109,7 +114,14 @@ class HiveFlowHandler(ConfigFlow, domain=DOMAIN):
         errors = {}
 
         if user_input and user_input["2fa"] == "0000":
-            self.tokens = await self.hive_auth.login()
+            # Log in again so that Hive sends a new code.
+            try:
+                self.tokens = await self.hive_auth.login()
+            except HiveConnectionError:
+                errors["base"] = "no_internet_available"
+            except HiveError as err:
+                _LOGGER.error("Hive login failed: %s", err)
+                errors["base"] = "unknown"
         elif user_input:
             try:
                 self.tokens = await self.hive_auth.sms_2fa(
@@ -117,21 +129,31 @@ class HiveFlowHandler(ConfigFlow, domain=DOMAIN):
                 )
             except HiveInvalid2FACode:
                 errors["base"] = "invalid_code"
-            except HiveApiError:
+            except HiveConnectionError:
                 errors["base"] = "no_internet_available"
+            except HiveError as err:
+                _LOGGER.error("Hive two-factor authentication failed: %s", err)
+                errors["base"] = "unknown"
 
             if not errors:
                 _LOGGER.debug("2FA successful")
                 if self.source == SOURCE_REAUTH:
                     try:
                         device_registered = await self.hive_auth.is_device_registered()
-                    except HiveApiError as err:
+                    except HiveConnectionError as err:
                         _LOGGER.debug(
                             "Failed to check whether the Hive device"
                             " is registered during reauthentication: %s",
                             err,
                         )
                         errors["base"] = "no_internet_available"
+                    except HiveError as err:
+                        _LOGGER.error(
+                            "Failed to check whether the Hive device"
+                            " is registered during reauthentication: %s",
+                            err,
+                        )
+                        errors["base"] = "unknown"
                     else:
                         if device_registered:
                             return await self.async_setup_hive_entry()
@@ -154,13 +176,21 @@ class HiveFlowHandler(ConfigFlow, domain=DOMAIN):
             if self.device_registration:
                 _LOGGER.debug("Attempting to register device")
                 self.device_name = user_input["device_name"]
-                await self.hive_auth.device_registration(user_input["device_name"])
-                self.data["device_data"] = await self.hive_auth.get_device_data()
-                _LOGGER.debug("Device registration successful")
-            try:
-                return await self.async_setup_hive_entry()
-            except UnknownHiveError:
-                errors["base"] = "unknown"
+                try:
+                    await self.hive_auth.device_registration(user_input["device_name"])
+                except HiveConnectionError:
+                    errors["base"] = "no_internet_available"
+                except HiveError as err:
+                    _LOGGER.error("Hive device registration failed: %s", err)
+                    errors["base"] = "unknown"
+                else:
+                    self.data["device_data"] = self.hive_auth.get_device_data()
+                    _LOGGER.debug("Device registration successful")
+            if not errors:
+                try:
+                    return await self.async_setup_hive_entry()
+                except UnknownHiveError:
+                    errors["base"] = "unknown"
 
         schema = probatio.Schema(
             # Name field is no longer allowed in config flow schemas
@@ -236,7 +266,7 @@ class HiveOptionsFlowHandler(OptionsFlow):
         if user_input is not None:
             new_interval = user_input.get(CONF_SCAN_INTERVAL)
             assert self.hive
-            await self.hive.updateInterval(new_interval)
+            self.hive.update_interval(new_interval)
             return self.async_create_entry(title="", data=user_input)
 
         schema = probatio.Schema(

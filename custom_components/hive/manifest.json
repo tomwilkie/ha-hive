@@ -11,6 +11,8 @@
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/tomwilkie/ha-hive/issues",
   "loggers": ["apyhiveapi"],
-  "requirements": ["pyhive-integration==1.0.10"],
+  "requirements": [
+    "https://github.com/tomwilkie/pyhive-integration/releases/download/v0.1.0/pyhive_integration-0.1.0-py3-none-any.whl#pyhive-integration==0.1.0"
+  ],
   "version": "0.1.0"
 }

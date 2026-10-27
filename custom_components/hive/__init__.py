@@ -2,24 +2,25 @@
 
 from collections.abc import Awaitable, Callable, Coroutine
 from functools import wraps
-import logging
 from typing import Any, Concatenate
 
-from aiohttp.web_exceptions import HTTPException
-from apyhiveapi import Auth, Hive
-from apyhiveapi.helper.hive_exceptions import HiveReauthRequired
+from apyhiveapi import Auth, Hive, HiveConnectionError, HiveError, HiveReauthRequired
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryError,
+    ConfigEntryNotReady,
+    HomeAssistantError,
+    ServiceValidationError,
+)
 from homeassistant.helpers import aiohttp_client, device_registry as dr
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .const import DOMAIN, PLATFORMS
 from .entity import HiveEntity
-
-_LOGGER = logging.getLogger(__name__)
 
 type HiveConfigEntry = ConfigEntry[Hive]
 
@@ -37,28 +38,32 @@ async def async_setup_entry(hass: HomeAssistant, entry: HiveConfigEntry) -> bool
     entry.runtime_data = hive
 
     try:
-        devices = await hive.session.startSession(hive_config)
-    except HTTPException as error:
-        _LOGGER.error("Could not connect to the internet: %s", error)
-        raise ConfigEntryNotReady from error
+        devices = await hive.start_session(hive_config)
     except HiveReauthRequired as err:
-        raise ConfigEntryAuthFailed from err
+        raise ConfigEntryAuthFailed(str(err)) from err
+    except HiveConnectionError as err:
+        raise ConfigEntryNotReady(str(err)) from err
+    except HiveError as err:
+        raise ConfigEntryError(str(err)) from err
 
-    hub_data = devices["parent"][0]
-    connections: set[tuple[str, str]] = set()
-    if mac := hub_data.get("macAddress"):
-        connections.add((dr.CONNECTION_NETWORK_MAC, mac))
+    # The hub is missing when Hive did not report one; the library logs that.
+    if devices["parent"]:
+        hub_data = devices["parent"][0]
+        hub_props = hub_data.device_data
+        connections: set[tuple[str, str]] = set()
+        if mac := hub_props.get("macAddress"):
+            connections.add((dr.CONNECTION_NETWORK_MAC, mac))
 
-    device_registry = dr.async_get(hass)
-    device_registry.async_get_or_create(
-        config_entry_id=entry.entry_id,
-        identifiers={(DOMAIN, hub_data["device_id"])},
-        connections=connections,
-        name=hub_data["hiveName"],
-        model=hub_data["deviceData"]["model"],
-        sw_version=hub_data["deviceData"]["version"],
-        manufacturer=hub_data["deviceData"]["manufacturer"],
-    )
+        device_registry = dr.async_get(hass)
+        device_registry.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, hub_data.device_id)},
+            connections=connections,
+            name=hub_data.hive_name,
+            model=hub_props.get("model"),
+            sw_version=hub_props.get("version"),
+            manufacturer=hub_props.get("manufacturer"),
+        )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -89,11 +94,20 @@ async def async_remove_config_entry_device(
 def refresh_system[_HiveEntityT: HiveEntity, **_P](
     func: Callable[Concatenate[_HiveEntityT, _P], Awaitable[Any]],
 ) -> Callable[Concatenate[_HiveEntityT, _P], Coroutine[Any, Any, None]]:
-    """Force update all entities after state change."""
+    """Report a failed command, or force update all entities after state change.
+
+    The library's commands return nothing and raise a HiveError when the
+    change could not be made, or a ValueError for an invalid argument.
+    """
 
     @wraps(func)
     async def wrapper(self: _HiveEntityT, *args: _P.args, **kwargs: _P.kwargs) -> None:
-        await func(self, *args, **kwargs)
+        try:
+            await func(self, *args, **kwargs)
+        except ValueError as err:
+            raise ServiceValidationError(str(err)) from err
+        except HiveError as err:
+            raise HomeAssistantError(str(err)) from err
         async_dispatcher_send(self.hass, DOMAIN)
 
     return wrapper

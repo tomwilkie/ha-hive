@@ -1,158 +1,106 @@
 """Tests for the Hive integration __init__."""
 
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from apyhiveapi import (
+    Device,
+    HiveApiError,
+    HiveConnectionError,
+    HiveDeviceOffline,
+    HiveError,
+    HiveInvalidPassword,
+    HiveReauthRequired,
+)
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.hive import async_remove_config_entry_device
 from custom_components.hive.const import (
+    ATTR_ONOFF,
+    ATTR_TIME_PERIOD,
     DOMAIN,
     SERVICE_BOOST_HEATING_OFF,
     SERVICE_BOOST_HEATING_ON,
     SERVICE_BOOST_HOT_WATER,
 )
-from homeassistant.components.binary_sensor import BinarySensorDeviceClass
-from homeassistant.config_entries import ConfigEntryState
-from homeassistant.const import ATTR_DEVICE_CLASS, CONF_PASSWORD, CONF_USERNAME
+from homeassistant.components.climate import (
+    ATTR_CURRENT_TEMPERATURE,
+    ATTR_HVAC_MODE,
+    ATTR_PRESET_MODE,
+    DOMAIN as CLIMATE_DOMAIN,
+    PRESET_BOOST,
+    PRESET_NONE,
+    SERVICE_SET_HVAC_MODE,
+    SERVICE_SET_PRESET_MODE,
+    SERVICE_SET_TEMPERATURE,
+    HVACMode,
+)
+from homeassistant.components.water_heater import (
+    ATTR_OPERATION_MODE,
+    DOMAIN as WATER_HEATER_DOMAIN,
+    SERVICE_SET_OPERATION_MODE,
+    STATE_ECO,
+)
+from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
+from homeassistant.const import (
+    ATTR_ENTITY_ID,
+    ATTR_TEMPERATURE,
+    SERVICE_TURN_OFF,
+    SERVICE_TURN_ON,
+    STATE_UNAVAILABLE,
+)
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 
-_ENTRY_DATA = {
-    CONF_USERNAME: "user@example.com",
-    CONF_PASSWORD: "password",
-    "tokens": {
-        "AuthenticationResult": {
-            "AccessToken": "mock-access-token",
-            "RefreshToken": "mock-refresh-token",
-        },
-        "ChallengeName": "SUCCESS",
-    },
-}
-
-_HUB_BASE = {
-    "device_id": "hive-hub-id",
-    "hiveName": "Hive Hub",
-    "deviceData": {
-        "model": "Hub",
-        "version": "1.2.3",
-        "manufacturer": "Hive",
-        "online": True,
-    },
-}
-
-_CHILD_BINARY_SENSOR = {
-    "device_id": "hive-child-id",
-    "hiveID": "hive-child-id",
-    "hiveName": "Hive Hub Connectivity",
-    "haName": "Hub Connectivity",
-    "device_name": "Hive Hub",
-    "hiveType": "Connectivity",
-    "parentDevice": "hive-hub-id",
-    "deviceData": {
-        "model": "Hub",
-        "version": "1.2.3",
-        "manufacturer": "Hive",
-        "online": True,
-    },
-    "status": {"state": True},
-}
-
-_GLASS_BREAK_BINARY_SENSOR = {
-    "device_id": "hive-glass-break-id",
-    "hiveID": "hive-glass-break-id",
-    "hiveName": "Glass Break",
-    "haName": "Glass Break",
-    "device_name": "Glass Break Sensor",
-    "hiveType": "GLASS_BREAK",
-    "parentDevice": "hive-hub-id",
-    "deviceData": {
-        "model": "Glass Break Sensor",
-        "version": "1.2.3",
-        "manufacturer": "Hive",
-        "online": True,
-    },
-    "status": {"state": False},
-}
-
-# The hub's own diagnostic sensor reports the hub as its own parent
-# (parentDevice == device_id), which would link the hub device to itself.
-_HUB_BINARY_SENSOR = {
-    "device_id": "hive-hub-id",
-    "hiveID": "hive-hub-id",
-    "hiveName": "Hive Hub Status",
-    "haName": "Hive Hub Status",
-    "device_name": "Hive Hub",
-    "hiveType": "Connectivity",
-    "parentDevice": "hive-hub-id",
-    "deviceData": {
-        "model": "Hub",
-        "version": "1.2.3",
-        "manufacturer": "Hive",
-        "online": True,
-    },
-    "status": {"state": True},
-}
+from tests.common import (
+    CLIMATE_UNIQUE_ID,
+    DEVICE_DATA,
+    ENTRY_DATA,
+    HUB_ID,
+    THERMOSTAT_ID,
+    WATER_HEATER_UNIQUE_ID,
+    make_climate,
+    make_devices,
+    make_hub,
+    make_water_heater,
+    setup_entry,
+)
 
 
-def _make_mock_hive(
-    hub_extra: dict, extra_devices: dict[str, list[dict[str, Any]]] | None = None
-) -> MagicMock:
-    """Return a mocked Hive instance.
-
-    startSession returns a minimal devices dict.
-    """
-    hub_data = {**_HUB_BASE, **hub_extra}
-    devices = {"parent": [hub_data], **(extra_devices or {})}
-    mock_hive = MagicMock()
-    mock_hive.session.startSession = AsyncMock(return_value=devices)
-    mock_hive.session.deviceList = devices
-    return mock_hive
-
-
-async def test_hub_device_registers_mac_connection(
+async def test_hub_device_carries_hive_hardware_details(
     hass: HomeAssistant,
     device_registry: dr.DeviceRegistry,
+    mock_hive: MagicMock,
+    mock_config_entry: MockConfigEntry,
 ) -> None:
-    """Hub device entry includes a MAC connection when macAddress is present."""
-    entry = MockConfigEntry(domain=DOMAIN, data=_ENTRY_DATA)
-    entry.add_to_hass(hass)
+    """The hub's device entry has the name, model, version, manufacturer and MAC Hive reports."""
+    mock_hive.device_list = make_devices(hub=make_hub(macAddress="00:1C:2B:1C:2E:68"))
 
-    mock_hive = _make_mock_hive({"macAddress": "00:1C:2B:1C:2E:68"})
-
-    with patch(
-        "custom_components.hive.Hive",
-        return_value=mock_hive,
-    ):
-        await hass.config_entries.async_setup(entry.entry_id)
-        await hass.async_block_till_done()
+    await setup_entry(hass, mock_config_entry)
 
     device = device_registry.async_get_device_by_identifier(
-        (DOMAIN, "hive-hub-id"), entry.entry_id
+        (DOMAIN, HUB_ID), mock_config_entry.entry_id
     )
     assert device is not None
+    assert device.name == "Hive Hub"
+    assert device.model == "Hub"
+    assert device.sw_version == "1.2.3"
+    assert device.manufacturer == "Hive"
     assert (dr.CONNECTION_NETWORK_MAC, "00:1c:2b:1c:2e:68") in device.connections
 
 
-async def test_hub_device_no_mac_connection_when_absent(
+async def test_hub_device_has_no_mac_connection_when_hive_reports_none(
     hass: HomeAssistant,
     device_registry: dr.DeviceRegistry,
+    mock_hive: MagicMock,
+    mock_config_entry: MockConfigEntry,
 ) -> None:
-    """Hub device entry has no MAC connection when macAddress is absent."""
-    entry = MockConfigEntry(domain=DOMAIN, data=_ENTRY_DATA)
-    entry.add_to_hass(hass)
-
-    mock_hive = _make_mock_hive({})  # no macAddress key
-
-    with patch(
-        "custom_components.hive.Hive",
-        return_value=mock_hive,
-    ):
-        await hass.config_entries.async_setup(entry.entry_id)
-        await hass.async_block_till_done()
+    """A hub without a macAddress prop gets no MAC connection."""
+    await setup_entry(hass, mock_config_entry)
 
     device = device_registry.async_get_device_by_identifier(
-        (DOMAIN, "hive-hub-id"), entry.entry_id
+        (DOMAIN, HUB_ID), mock_config_entry.entry_id
     )
     assert device is not None
     assert not any(
@@ -160,125 +108,437 @@ async def test_hub_device_no_mac_connection_when_absent(
     )
 
 
-async def test_child_device_links_to_hub_via_device_id(
+async def test_thermostat_device_links_to_hub(
     hass: HomeAssistant,
     device_registry: dr.DeviceRegistry,
+    mock_hive: MagicMock,
+    mock_config_entry: MockConfigEntry,
 ) -> None:
-    """A child device's via_device_id should point at the hub device's id."""
-    entry = MockConfigEntry(domain=DOMAIN, data=_ENTRY_DATA)
-    entry.add_to_hass(hass)
+    """The thermostat's device entry points at the hub as its via device."""
+    await setup_entry(hass, mock_config_entry)
 
-    mock_hive = _make_mock_hive(
-        {"macAddress": "00:1C:2B:1C:2E:68"},
-        {"binary_sensor": [_CHILD_BINARY_SENSOR], "sensor": []},
+    hub = device_registry.async_get_device_by_identifier(
+        (DOMAIN, HUB_ID), mock_config_entry.entry_id
     )
-    mock_hive.session.updateData = AsyncMock()
-    mock_hive.sensor.getSensor = AsyncMock(side_effect=lambda device: device)
-
-    with patch(
-        "custom_components.hive.Hive",
-        return_value=mock_hive,
-    ):
-        await hass.config_entries.async_setup(entry.entry_id)
-        await hass.async_block_till_done()
-
-    hub_device = device_registry.async_get_device_by_identifier(
-        (DOMAIN, "hive-hub-id"), entry.entry_id
+    thermostat = device_registry.async_get_device_by_identifier(
+        (DOMAIN, THERMOSTAT_ID), mock_config_entry.entry_id
     )
-    child_device = device_registry.async_get_device_by_identifier(
-        (DOMAIN, "hive-child-id"), entry.entry_id
-    )
-    assert hub_device is not None
-    assert child_device is not None
-    assert child_device.via_device_id == hub_device.id
+    assert hub is not None
+    assert thermostat is not None
+    assert thermostat.via_device_id == hub.id
 
 
-async def test_hub_diagnostic_sensor_not_linked_to_itself(
+async def test_entities_are_set_up_without_a_hub(
     hass: HomeAssistant,
     device_registry: dr.DeviceRegistry,
+    mock_hive: MagicMock,
+    mock_config_entry: MockConfigEntry,
 ) -> None:
-    """The hub's own diagnostic sensor must not link the hub device to itself."""
-    entry = MockConfigEntry(domain=DOMAIN, data=_ENTRY_DATA)
-    entry.add_to_hass(hass)
-
-    mock_hive = _make_mock_hive(
-        {"macAddress": "00:1C:2B:1C:2E:68"},
-        {"binary_sensor": [_HUB_BINARY_SENSOR], "sensor": []},
+    """When Hive reports no hub the entry still loads, with no via device."""
+    mock_hive.device_list = make_devices(
+        hub=None, climate=[make_climate(parent_device=None)]
     )
-    mock_hive.session.updateData = AsyncMock()
-    mock_hive.sensor.getSensor = AsyncMock(side_effect=lambda device: device)
 
-    with patch(
-        "custom_components.hive.Hive",
-        return_value=mock_hive,
-    ):
-        await hass.config_entries.async_setup(entry.entry_id)
-        await hass.async_block_till_done()
+    await setup_entry(hass, mock_config_entry)
 
-    hub_device = device_registry.async_get_device_by_identifier(
-        (DOMAIN, "hive-hub-id"), entry.entry_id
+    assert mock_config_entry.state is ConfigEntryState.LOADED
+    thermostat = device_registry.async_get_device_by_identifier(
+        (DOMAIN, THERMOSTAT_ID), mock_config_entry.entry_id
     )
-    assert hub_device is not None
-    assert hub_device.via_device_id is None
+    assert thermostat is not None
+    assert thermostat.via_device_id is None
 
 
-async def test_glass_break_device_class(
+@pytest.mark.parametrize(
+    ("climate", "state", "preset", "current_temperature"),
+    [
+        pytest.param(make_climate(), HVACMode.AUTO, PRESET_NONE, 19.5, id="schedule"),
+        pytest.param(
+            make_climate(boost="ON"), HVACMode.HEAT, PRESET_BOOST, 19.5, id="boosting"
+        ),
+        pytest.param(
+            make_climate(online=False), STATE_UNAVAILABLE, None, None, id="offline"
+        ),
+    ],
+)
+async def test_climate_state_reflects_hive(
     hass: HomeAssistant,
     entity_registry: er.EntityRegistry,
+    mock_hive: MagicMock,
+    mock_config_entry: MockConfigEntry,
+    climate: Device,
+    state: str,
+    preset: str | None,
+    current_temperature: float | None,
 ) -> None:
-    """Test the glass break binary sensor device class."""
-    entry = MockConfigEntry(domain=DOMAIN, data=_ENTRY_DATA)
-    entry.add_to_hass(hass)
+    """The climate entity reports the mode, preset and temperature the library gives it."""
+    mock_hive.device_list = make_devices(hub=make_hub(), climate=[climate])
 
-    mock_hive = _make_mock_hive(
-        {"macAddress": "00:1C:2B:1C:2E:68"},
-        {"binary_sensor": [_GLASS_BREAK_BINARY_SENSOR], "sensor": []},
-    )
-    mock_hive.session.updateData = AsyncMock()
-    mock_hive.sensor.getSensor = AsyncMock(side_effect=lambda device: device)
-
-    with patch(
-        "custom_components.hive.Hive",
-        return_value=mock_hive,
-    ):
-        await hass.config_entries.async_setup(entry.entry_id)
-        await hass.async_block_till_done()
+    await setup_entry(hass, mock_config_entry)
 
     entity_id = entity_registry.async_get_entity_id(
-        "binary_sensor", DOMAIN, "hive-glass-break-id-GLASS_BREAK"
+        CLIMATE_DOMAIN, DOMAIN, CLIMATE_UNIQUE_ID
     )
     assert entity_id
-    state = hass.states.get(entity_id)
-    assert state
-    assert state.attributes[ATTR_DEVICE_CLASS] == BinarySensorDeviceClass.GLASS_BREAK
+    entity_state = hass.states.get(entity_id)
+    assert entity_state
+    assert entity_state.state == state
+    assert entity_state.attributes.get(ATTR_PRESET_MODE) == preset
+    assert entity_state.attributes.get(ATTR_CURRENT_TEMPERATURE) == current_temperature
 
 
-async def test_all_platforms_forwarded_without_devices(
+@pytest.mark.parametrize(
+    ("water_heater", "state"),
+    [
+        pytest.param(make_water_heater(), STATE_ECO, id="schedule"),
+        pytest.param(make_water_heater(online=False), STATE_UNAVAILABLE, id="offline"),
+    ],
+)
+async def test_water_heater_state_reflects_hive(
     hass: HomeAssistant,
+    entity_registry: er.EntityRegistry,
+    mock_hive: MagicMock,
+    mock_config_entry: MockConfigEntry,
+    water_heater: Device,
+    state: str,
+) -> None:
+    """The water heater entity reports the operation the library gives it."""
+    mock_hive.device_list = make_devices(hub=make_hub(), water_heater=[water_heater])
+
+    await setup_entry(hass, mock_config_entry)
+
+    entity_id = entity_registry.async_get_entity_id(
+        WATER_HEATER_DOMAIN, DOMAIN, WATER_HEATER_UNIQUE_ID
+    )
+    assert entity_id
+    entity_state = hass.states.get(entity_id)
+    assert entity_state
+    assert entity_state.state == state
+
+
+@pytest.mark.parametrize(
+    ("error", "state", "flow_sources"),
+    [
+        pytest.param(
+            HiveReauthRequired("Hive asked for an SMS code"),
+            ConfigEntryState.SETUP_ERROR,
+            [SOURCE_REAUTH],
+            id="reauth-required",
+        ),
+        pytest.param(
+            HiveConnectionError("Timed out calling Hive"),
+            ConfigEntryState.SETUP_RETRY,
+            [],
+            id="connection-error",
+        ),
+        pytest.param(
+            HiveApiError("Hive returned no products or devices"),
+            ConfigEntryState.SETUP_ERROR,
+            [],
+            id="refused",
+        ),
+    ],
+)
+async def test_failed_session_start_sets_the_entry_state(
+    hass: HomeAssistant,
+    mock_hive: MagicMock,
+    mock_auth: MagicMock,
+    mock_config_entry: MockConfigEntry,
+    error: HiveError,
+    state: ConfigEntryState,
+    flow_sources: list[str],
+) -> None:
+    """A rejected login starts a reauth flow, a transient failure is retried, anything else is a setup error."""
+    mock_hive.start_session.side_effect = error
+    # The reauth flow logs in straight away with the saved credentials.
+    mock_auth.login.side_effect = HiveInvalidPassword()
+
+    await setup_entry(hass, mock_config_entry)
+
+    assert mock_config_entry.state is state
+    flows = hass.config_entries.flow.async_progress_by_handler(DOMAIN)
+    assert [flow["context"]["source"] for flow in flows] == flow_sources
+
+
+@pytest.mark.parametrize(
+    ("domain", "service", "data", "method", "args"),
+    [
+        pytest.param(
+            CLIMATE_DOMAIN,
+            SERVICE_SET_HVAC_MODE,
+            {ATTR_HVAC_MODE: HVACMode.HEAT},
+            "set_mode",
+            ("MANUAL",),
+            id="hvac-mode",
+        ),
+        pytest.param(
+            CLIMATE_DOMAIN,
+            SERVICE_SET_TEMPERATURE,
+            {ATTR_TEMPERATURE: 20.5},
+            "set_target_temperature",
+            (20.5,),
+            id="target-temperature",
+        ),
+        # The boost preset runs for 30 minutes at half a degree above the current 19.5.
+        pytest.param(
+            CLIMATE_DOMAIN,
+            SERVICE_SET_PRESET_MODE,
+            {ATTR_PRESET_MODE: PRESET_BOOST},
+            "set_boost_on",
+            (30, 20.0),
+            id="boost-preset",
+        ),
+        pytest.param(
+            DOMAIN,
+            SERVICE_BOOST_HEATING_ON,
+            {ATTR_TIME_PERIOD: "01:00:00", ATTR_TEMPERATURE: 22.0},
+            "set_boost_on",
+            (60.0, 22.0),
+            id="boost-heating-on",
+        ),
+        pytest.param(
+            DOMAIN,
+            SERVICE_BOOST_HEATING_OFF,
+            {},
+            "set_boost_off",
+            (),
+            id="boost-heating-off",
+        ),
+    ],
+)
+async def test_climate_service_calls_the_heating_command(
+    hass: HomeAssistant,
+    entity_registry: er.EntityRegistry,
+    mock_hive: MagicMock,
+    mock_config_entry: MockConfigEntry,
+    domain: str,
+    service: str,
+    data: dict[str, object],
+    method: str,
+    args: tuple[object, ...],
+) -> None:
+    """A climate service call becomes the matching library command, in Hive's units."""
+    await setup_entry(hass, mock_config_entry)
+    entity_id = entity_registry.async_get_entity_id(
+        CLIMATE_DOMAIN, DOMAIN, CLIMATE_UNIQUE_ID
+    )
+    command = AsyncMock()
+    setattr(mock_hive.heating, method, command)
+
+    await hass.services.async_call(
+        domain, service, {ATTR_ENTITY_ID: entity_id, **data}, blocking=True
+    )
+
+    command.assert_awaited_once_with(mock_hive.device_list["climate"][0], *args)
+
+
+async def test_ending_the_boost_preset_calls_set_boost_off(
+    hass: HomeAssistant,
+    entity_registry: er.EntityRegistry,
+    mock_hive: MagicMock,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """Setting the preset back to none while boosting ends the boost."""
+    mock_hive.device_list = make_devices(
+        hub=make_hub(), climate=[make_climate(boost="ON")]
+    )
+    await setup_entry(hass, mock_config_entry)
+    entity_id = entity_registry.async_get_entity_id(
+        CLIMATE_DOMAIN, DOMAIN, CLIMATE_UNIQUE_ID
+    )
+    mock_hive.heating.set_boost_off = AsyncMock()
+
+    await hass.services.async_call(
+        CLIMATE_DOMAIN,
+        SERVICE_SET_PRESET_MODE,
+        {ATTR_ENTITY_ID: entity_id, ATTR_PRESET_MODE: PRESET_NONE},
+        blocking=True,
+    )
+
+    mock_hive.heating.set_boost_off.assert_awaited_once_with(
+        mock_hive.device_list["climate"][0]
+    )
+
+
+@pytest.mark.parametrize(
+    ("domain", "service", "data", "method", "args"),
+    [
+        pytest.param(
+            WATER_HEATER_DOMAIN,
+            SERVICE_TURN_ON,
+            {},
+            "set_mode",
+            ("MANUAL",),
+            id="turn-on",
+        ),
+        pytest.param(
+            WATER_HEATER_DOMAIN,
+            SERVICE_TURN_OFF,
+            {},
+            "set_mode",
+            ("OFF",),
+            id="turn-off",
+        ),
+        pytest.param(
+            WATER_HEATER_DOMAIN,
+            SERVICE_SET_OPERATION_MODE,
+            {ATTR_OPERATION_MODE: STATE_ECO},
+            "set_mode",
+            ("SCHEDULE",),
+            id="operation-mode",
+        ),
+        pytest.param(
+            DOMAIN,
+            SERVICE_BOOST_HOT_WATER,
+            {ATTR_TIME_PERIOD: "01:30:00", ATTR_ONOFF: "on"},
+            "set_boost_on",
+            (90.0,),
+            id="boost-on",
+        ),
+        pytest.param(
+            DOMAIN,
+            SERVICE_BOOST_HOT_WATER,
+            {ATTR_ONOFF: "off"},
+            "set_boost_off",
+            (),
+            id="boost-off",
+        ),
+    ],
+)
+async def test_water_heater_service_calls_the_hot_water_command(
+    hass: HomeAssistant,
+    entity_registry: er.EntityRegistry,
+    mock_hive: MagicMock,
+    mock_config_entry: MockConfigEntry,
+    domain: str,
+    service: str,
+    data: dict[str, object],
+    method: str,
+    args: tuple[object, ...],
+) -> None:
+    """A water heater service call becomes the matching library command."""
+    await setup_entry(hass, mock_config_entry)
+    entity_id = entity_registry.async_get_entity_id(
+        WATER_HEATER_DOMAIN, DOMAIN, WATER_HEATER_UNIQUE_ID
+    )
+    command = AsyncMock()
+    setattr(mock_hive.hotwater, method, command)
+
+    await hass.services.async_call(
+        domain, service, {ATTR_ENTITY_ID: entity_id, **data}, blocking=True
+    )
+
+    command.assert_awaited_once_with(mock_hive.device_list["water_heater"][0], *args)
+
+
+async def test_failed_command_raises_home_assistant_error(
+    hass: HomeAssistant,
+    entity_registry: er.EntityRegistry,
+    mock_hive: MagicMock,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """A command the library could not carry out fails the service call with its message."""
+    await setup_entry(hass, mock_config_entry)
+    entity_id = entity_registry.async_get_entity_id(
+        CLIMATE_DOMAIN, DOMAIN, CLIMATE_UNIQUE_ID
+    )
+    mock_hive.heating.set_mode = AsyncMock(
+        side_effect=HiveDeviceOffline("Heating is offline")
+    )
+
+    with pytest.raises(HomeAssistantError, match="Heating is offline"):
+        await hass.services.async_call(
+            CLIMATE_DOMAIN,
+            SERVICE_SET_HVAC_MODE,
+            {ATTR_ENTITY_ID: entity_id, ATTR_HVAC_MODE: HVACMode.HEAT},
+            blocking=True,
+        )
+
+
+async def test_rejected_command_argument_raises_validation_error(
+    hass: HomeAssistant,
+    entity_registry: er.EntityRegistry,
+    mock_hive: MagicMock,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """An argument the library rejects is reported as a validation error, not a crash."""
+    await setup_entry(hass, mock_config_entry)
+    entity_id = entity_registry.async_get_entity_id(
+        CLIMATE_DOMAIN, DOMAIN, CLIMATE_UNIQUE_ID
+    )
+    mock_hive.heating.set_boost_on = AsyncMock(
+        side_effect=ValueError("Boost minutes must be positive, not 0.0")
+    )
+
+    with pytest.raises(ServiceValidationError, match="Boost minutes must be positive"):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_BOOST_HEATING_ON,
+            {
+                ATTR_ENTITY_ID: entity_id,
+                ATTR_TIME_PERIOD: "00:00:30",
+                ATTR_TEMPERATURE: 20.0,
+            },
+            blocking=True,
+        )
+
+
+async def test_services_are_registered_without_devices(
+    hass: HomeAssistant,
+    mock_hive: MagicMock,
+    mock_config_entry: MockConfigEntry,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """All platforms are set up and the entry reloads on a device-less account."""
-    entry = MockConfigEntry(domain=DOMAIN, data=_ENTRY_DATA)
-    entry.add_to_hass(hass)
+    """The entry loads and reloads, with its services, on an account with only a hub."""
+    mock_hive.device_list = make_devices(hub=make_hub())
 
-    mock_hive = _make_mock_hive({})
+    await setup_entry(hass, mock_config_entry)
 
-    with patch(
-        "custom_components.hive.Hive",
-        return_value=mock_hive,
-    ):
-        await hass.config_entries.async_setup(entry.entry_id)
-        await hass.async_block_till_done()
+    assert mock_config_entry.state is ConfigEntryState.LOADED
+    # Entity services must not depend on device discovery.
+    assert hass.services.has_service(DOMAIN, SERVICE_BOOST_HOT_WATER)
+    assert hass.services.has_service(DOMAIN, SERVICE_BOOST_HEATING_ON)
+    assert hass.services.has_service(DOMAIN, SERVICE_BOOST_HEATING_OFF)
 
-        assert entry.state is ConfigEntryState.LOADED
-        # Entity services must not depend on device discovery.
-        assert hass.services.has_service(DOMAIN, SERVICE_BOOST_HOT_WATER)
-        assert hass.services.has_service(DOMAIN, SERVICE_BOOST_HEATING_ON)
-        assert hass.services.has_service(DOMAIN, SERVICE_BOOST_HEATING_OFF)
+    await hass.config_entries.async_reload(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
 
-        await hass.config_entries.async_reload(entry.entry_id)
-        await hass.async_block_till_done()
-
-    assert entry.state is ConfigEntryState.LOADED
+    assert mock_config_entry.state is ConfigEntryState.LOADED
     assert "Error setting up entry" not in caplog.text
     assert "Error unloading entry" not in caplog.text
+
+
+async def test_removing_the_entry_forgets_the_hive_device(
+    hass: HomeAssistant,
+    mock_hive: MagicMock,
+) -> None:
+    """Removing the entry tells Hive to forget the registered device."""
+    entry = MockConfigEntry(
+        domain=DOMAIN, data={**ENTRY_DATA, "device_data": DEVICE_DATA}
+    )
+    await setup_entry(hass, entry)
+
+    with patch("custom_components.hive.Auth", autospec=True) as mock_auth_class:
+        await hass.config_entries.async_remove(entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert hass.config_entries.async_entries(DOMAIN) == []
+    mock_auth_class.return_value.forget_device.assert_awaited_once_with(
+        "mock-access-token", "mock-device-key"
+    )
+
+
+async def test_devices_can_be_removed_from_the_entry(
+    hass: HomeAssistant,
+    device_registry: dr.DeviceRegistry,
+    mock_hive: MagicMock,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """The device registry may remove any of the integration's devices."""
+    await setup_entry(hass, mock_config_entry)
+    thermostat = device_registry.async_get_device_by_identifier(
+        (DOMAIN, THERMOSTAT_ID), mock_config_entry.entry_id
+    )
+    assert thermostat is not None
+
+    assert await async_remove_config_entry_device(hass, mock_config_entry, thermostat)
