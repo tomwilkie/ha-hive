@@ -66,12 +66,13 @@ What this repository calls, and so what the library must keep:
   `set_boost_on(device, minutes)`, `set_boost_off`. Commands return nothing
   and raise a `HiveError`; a bad argument raises `ValueError`.
 - `Auth(username=, password=)`: `login`, `sms_2fa(code, challenge)`,
-  `device_registration(name)`, `get_device_data()` (sync; stored whole as
-  `device_data` in the config entry: the three device credentials, plus the
-  token issue time in v0.0.1), `is_device_registered()`,
+  `device_registration(name)`, `get_device_data()` (sync; the three device
+  credentials, stored whole as `device_data` in the config entry; v0.0.1
+  added the token issue time, which v0.1.0 accepts and ignores),
+  `is_device_registered()`,
   `forget_device(access_token, device_key)`.
-- `Device`, read as attributes (the library's `main` has dropped the
-  dict-style access that v0.0.1 still had): `hive_id`, `hive_type`,
+- `Device`, read as attributes (v0.1.0 dropped the dict-style access that
+  v0.0.1 had): `hive_id`, `hive_type`,
   `ha_name`, `device_id`, `device_name`, `device_data` (a dict of the
   hardware props plus `online`), `parent_device` (None when Hive reported no
   hub), `temperature_unit` (may be None), `status` (a dict), `min_temp`,
@@ -153,9 +154,9 @@ scripts/check_requirements
 
 - `update_data()` raising `HiveReauthRequired` during polling, or a command
   raising it, is not turned into a reauth flow: it propagates and is logged on
-  every poll (the library's `main` no longer contacts Cognito again for it,
-  so the cost is the log line). Needs `entry.async_start_reauth(hass)` in
-  the entities.
+  every poll (since v0.1.0 the library does not contact Cognito again for
+  it, so the cost is the log line). Needs `entry.async_start_reauth(hass)`
+  in the entities.
 - Refreshed tokens are never written back to the config entry (Pyhive#123):
   the library treats saved tokens as due for a refresh, so every start
   refreshes them. Needs a token-updated hook in the library.

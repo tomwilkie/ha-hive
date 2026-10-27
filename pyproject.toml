@@ -11,7 +11,7 @@ dev = [
     "pre-commit",
     # Keep in step with the requirement in custom_components/hive/manifest.json;
     # tests/test_manifest.py checks that they match.
-    "pyhive-integration @ https://github.com/tomwilkie/pyhive-integration/releases/download/v0.0.1/pyhive_integration-0.0.1-py3-none-any.whl",
+    "pyhive-integration @ https://github.com/tomwilkie/pyhive-integration/releases/download/v0.1.0/pyhive_integration-0.1.0-py3-none-any.whl",
 ]
 
 [tool.pytest.ini_options]

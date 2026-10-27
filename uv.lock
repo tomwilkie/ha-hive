@@ -1169,7 +1169,7 @@ dev = [
 [package.metadata.requires-dev]
 dev = [
     { name = "pre-commit" },
-    { name = "pyhive-integration", url = "https://github.com/tomwilkie/pyhive-integration/releases/download/v0.0.1/pyhive_integration-0.0.1-py3-none-any.whl" },
+    { name = "pyhive-integration", url = "https://github.com/tomwilkie/pyhive-integration/releases/download/v0.1.0/pyhive_integration-0.1.0-py3-none-any.whl" },
     { name = "pytest-homeassistant-custom-component", specifier = "==0.13.373" },
 ]
 
@@ -2277,15 +2277,15 @@ wheels = [
 
 [[package]]
 name = "pyhive-integration"
-version = "0.0.1"
-source = { url = "https://github.com/tomwilkie/pyhive-integration/releases/download/v0.0.1/pyhive_integration-0.0.1-py3-none-any.whl" }
+version = "0.1.0"
+source = { url = "https://github.com/tomwilkie/pyhive-integration/releases/download/v0.1.0/pyhive_integration-0.1.0-py3-none-any.whl" }
 dependencies = [
     { name = "aiohttp" },
     { name = "boto3" },
     { name = "botocore" },
 ]
 wheels = [
-    { url = "https://github.com/tomwilkie/pyhive-integration/releases/download/v0.0.1/pyhive_integration-0.0.1-py3-none-any.whl", hash = "sha256:6ff6edee12e568b3da99fe5acba93319a8614ca51ce2efc85952ffc8d15e2f9a" },
+    { url = "https://github.com/tomwilkie/pyhive-integration/releases/download/v0.1.0/pyhive_integration-0.1.0-py3-none-any.whl", hash = "sha256:5c8b1abdb040c07b8b57d1478ec626aa358dca9803b93fc3038f58cfbda95e6c" },
 ]
 
 [package.metadata]
