@@ -19,7 +19,10 @@ retried, not become a permanent setup error.
   `(DOMAIN, device_id)`, and the hub's device is registered in `__init__.py`.
   Do not change them.
 - HACS installs it from this repository (`hacs.json`); `manifest.json` carries
-  the version. `hacs.json`'s `homeassistant` is the oldest core release the
+  the version. A release is a version bump there merged to `main`:
+  `release.yml` tags the merge commit `v<version>` and publishes a GitHub
+  Release, which HACS offers as a versioned install. `hacs.json`'s
+  `homeassistant` is the oldest core release the
   code runs on. Raise it when using a newer core API: the code already needs
   2026.10 for `dr.async_get_device_id_by_identifier`, `probatio` and
   `AddConfigEntryEntitiesCallback`.
