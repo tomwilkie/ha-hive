@@ -1,6 +1,6 @@
 """Tests for the Hive integration __init__."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 from apyhiveapi import (
     Device,
@@ -405,6 +405,51 @@ async def test_climate_service_calls_the_heating_command(
     )
 
     command.assert_awaited_once_with(mock_hive.device_list["climate"][0], *args)
+
+
+@pytest.mark.parametrize(
+    ("data", "mode_calls"),
+    [
+        pytest.param({ATTR_TEMPERATURE: 24.0}, [], id="temperature-only"),
+        pytest.param(
+            {ATTR_HVAC_MODE: HVACMode.HEAT, ATTR_TEMPERATURE: 24.0},
+            ["MANUAL"],
+            id="with-hvac-mode",
+        ),
+    ],
+)
+async def test_set_temperature_sets_the_hvac_mode_first(
+    hass: HomeAssistant,
+    entity_registry: er.EntityRegistry,
+    mock_hive: MagicMock,
+    mock_config_entry: MockConfigEntry,
+    data: dict[str, object],
+    mode_calls: list[str],
+) -> None:
+    """Setting the temperature with an hvac mode sets the mode, then the temperature."""
+    await setup_entry(hass, mock_config_entry)
+    entity_id = entity_registry.async_get_entity_id(
+        CLIMATE_DOMAIN, DOMAIN, CLIMATE_UNIQUE_ID
+    )
+    # One parent mock records the order of the two commands.
+    commands = MagicMock()
+    for method in ("set_mode", "set_target_temperature"):
+        command = AsyncMock()
+        setattr(mock_hive.heating, method, command)
+        commands.attach_mock(command, method)
+
+    await hass.services.async_call(
+        CLIMATE_DOMAIN,
+        SERVICE_SET_TEMPERATURE,
+        {ATTR_ENTITY_ID: entity_id, **data},
+        blocking=True,
+    )
+
+    device = mock_hive.device_list["climate"][0]
+    assert commands.mock_calls == [
+        *(call.set_mode(device, mode) for mode in mode_calls),
+        call.set_target_temperature(device, 24.0),
+    ]
 
 
 async def test_ending_the_boost_preset_calls_set_boost_off(
