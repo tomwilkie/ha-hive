@@ -36,9 +36,12 @@ retried, not become a permanent setup error.
   `name @ url` form (it contains a space), and `pyproject.toml` can only take
   that form, so the two differ in shape; `tests/test_manifest.py` checks
   that they name the same wheel.
-- Only the climate and water heater platforms exist. The light, switch,
-  sensor and binary sensor platforms were removed with the library's support
-  for them; code the library has no counterpart for is removed, not kept.
+- Only the climate, water heater and binary sensor platforms exist. The
+  binary sensors are the heating and hot water boost status, keeping core's
+  unique IDs (`f"{hive_id}-Heating_Boost"`, `f"{hive_id}-Hotwater_Boost"`)
+  so core's entities carry over. The light, switch and sensor platforms, and
+  core's other binary sensors, were removed with the library's support for
+  them; code the library has no counterpart for is removed, not kept.
 
 ## The library is updated in step
 
@@ -80,7 +83,7 @@ What this repository calls, and so what the library must keep:
   hub), `temperature_unit` (may be None), `status` (a dict), `min_temp`,
   `max_temp`. `status` keys: climate `mode`, `action`,
   `current_temperature`, `target_temperature`, `boost`; water heater
-  `current_operation`. Any value may be None.
+  `current_operation`, `boost`. Any value may be None.
 - From `apyhiveapi`: `HiveError`, `HiveConnectionError`, `HiveApiError`,
   `HiveDeviceOffline`, `HiveReauthRequired` and its subclasses
   `HiveInvalidUsername`, `HiveInvalidPassword`, `HiveInvalid2FACode`;
@@ -145,6 +148,7 @@ custom_components/hive/
 ├── entity.py          ← HiveEntity: unique_id, device info, via_device, refresh signal
 ├── climate.py         ← heating zones and TRV controls
 ├── water_heater.py    ← hot water
+├── binary_sensor.py   ← heating and hot water boost status
 ├── services.py        ← boost_heating_on/off and boost_hot_water, registered in async_setup
 ├── const.py, manifest.json, services.yaml, icons.json
 └── strings.json, translations/en.json

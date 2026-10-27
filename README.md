@@ -28,9 +28,10 @@ existing config entry, devices and entity IDs.
 2. Restart Home Assistant. The log shows `We found a custom integration hive which has not been
    tested by Home Assistant`, which confirms that the override loaded.
 
-Only the climate and water heater platforms are provided. The light, switch, sensor and binary
-sensor entities the built-in integration created become unavailable and can be deleted from their
-device pages.
+Only the climate and water heater platforms are provided, plus binary sensors for heating and hot
+water boost, which take over the built-in integration's boost entities. The light, switch, sensor
+and other binary sensor entities the built-in integration created become unavailable and can be
+deleted from their device pages.
 
 To go back to the built-in integration, remove it in HACS and restart.
 

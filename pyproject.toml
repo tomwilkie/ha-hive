@@ -1,6 +1,6 @@
 [project]
 name = "ha-hive"
-version = "0.1.1"
+version = "0.1.2"
 description = "Hive integration for Home Assistant"
 requires-python = ">=3.14.2"
 dependencies = []
@@ -11,7 +11,7 @@ dev = [
     "pre-commit",
     # Keep in step with the requirement in custom_components/hive/manifest.json;
     # tests/test_manifest.py checks that they match.
-    "pyhive-integration @ https://github.com/tomwilkie/pyhive-integration/releases/download/v0.1.2/pyhive_integration-0.1.2-py3-none-any.whl",
+    "pyhive-integration @ https://github.com/tomwilkie/pyhive-integration/releases/download/v0.1.3/pyhive_integration-0.1.3-py3-none-any.whl",
 ]
 
 [tool.pytest.ini_options]
