@@ -60,9 +60,8 @@ its only consumer.
 What this repository calls, and so what the library must keep:
 
 - `Hive(websession)`: `start_session(config)`, `update_data()` (async, no
-  arguments, returns bool, raises only `HiveReauthRequired`),
-  `update_interval(seconds)` (sync), `device_list` with the keys `parent`,
-  `climate` and `water_heater`.
+  arguments, returns bool, raises only `HiveReauthRequired`), `device_list`
+  with the keys `parent`, `climate` and `water_heater`.
 - `hive.heating`: `get_climate`, `set_mode`, `set_target_temperature`,
   `set_boost_on(device, minutes, temperature)`, `set_boost_off`.
   `hive.hotwater`: `get_water_heater`, `set_mode`,
@@ -142,10 +141,11 @@ only publish moving branches and are meant to track current validation rules.
 custom_components/hive/
 ├── __init__.py        ← async_setup_entry: start_session → ConfigEntry* mapping,
 │                        the hub device; refresh_system wraps every command
-├── config_flow.py     ← login, SMS 2FA, device registration, reauth, options
+├── config_flow.py     ← login, SMS 2FA, device registration, reauth
 ├── entity.py          ← HiveEntity: unique_id, device info, via_device, refresh signal
-├── climate.py         ← heating zones and TRV controls; boost_heating_on/off services
-├── water_heater.py    ← hot water; boost_hot_water service
+├── climate.py         ← heating zones and TRV controls
+├── water_heater.py    ← hot water
+├── services.py        ← boost_heating_on/off and boost_hot_water, registered in async_setup
 ├── const.py, manifest.json, services.yaml, icons.json
 └── strings.json, translations/en.json
 tests/                 ← pytest-homeassistant-custom-component; helpers in common.py,
