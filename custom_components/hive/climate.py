@@ -7,6 +7,7 @@ from typing import Any, override
 from apyhiveapi import Device, Hive
 
 from homeassistant.components.climate import (
+    ATTR_HVAC_MODE,
     PRESET_BOOST,
     PRESET_NONE,
     ClimateEntity,
@@ -100,7 +101,9 @@ class HiveClimateEntity(HiveEntity, ClimateEntity):
     @refresh_system
     @override
     async def async_set_temperature(self, **kwargs: Any) -> None:
-        """Set new target temperature."""
+        """Set new target temperature, and the hvac mode if one is given."""
+        if (hvac_mode := kwargs.get(ATTR_HVAC_MODE)) is not None:
+            await self.async_handle_set_hvac_mode_service(hvac_mode)
         new_temperature = kwargs.get(ATTR_TEMPERATURE)
         if new_temperature is not None:
             await self.hive.heating.set_target_temperature(self.device, new_temperature)
