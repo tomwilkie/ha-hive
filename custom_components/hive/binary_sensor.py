@@ -30,7 +30,6 @@ class HiveBoostEntityDescription(BinarySensorEntityDescription):
     """
 
     device_type: str
-    name_suffix: str
     update_fn: Callable[[Hive, Device], Awaitable[Device]]
 
 
@@ -39,14 +38,12 @@ BOOST_TYPES: tuple[HiveBoostEntityDescription, ...] = (
         key="Heating_Boost",
         translation_key="heating",
         device_type="climate",
-        name_suffix="Boost",
         update_fn=lambda hive, device: hive.heating.get_climate(device),
     ),
     HiveBoostEntityDescription(
         key="Hotwater_Boost",
         translation_key="hot_water",
         device_type="water_heater",
-        name_suffix="Hot Water Boost",
         update_fn=lambda hive, device: hive.hotwater.get_water_heater(device),
     ),
 )
@@ -86,7 +83,6 @@ class HiveBoostBinarySensor(HiveEntity, BinarySensorEntity):
         """Initialise the boost binary sensor."""
         super().__init__(hass, entry, hive, hive_device)
         self.entity_description = entity_description
-        self._attr_name = f"{hive_device.ha_name} {entity_description.name_suffix}"
         self._attr_unique_id = f"{hive_device.hive_id}-{entity_description.key}"
 
     @override

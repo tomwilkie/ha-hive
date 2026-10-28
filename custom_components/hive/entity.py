@@ -17,7 +17,14 @@ if TYPE_CHECKING:
 
 
 class HiveEntity(Entity):
-    """Initiate Hive Base Class."""
+    """Initiate Hive Base Class.
+
+    Entities are named by Home Assistant from the device registry: the
+    friendly name is the device's name followed by the entity's own, so a
+    device the user renamed carries its new name into every entity.
+    """
+
+    _attr_has_entity_name = True
 
     def __init__(
         self,
@@ -29,7 +36,6 @@ class HiveEntity(Entity):
         """Initialize the instance."""
         self.hive = hive
         self.device = hive_device
-        self._attr_name = self.device.ha_name
         self._attr_unique_id = f"{self.device.hive_id}-{self.device.hive_type}"
         device_id = self.device.device_id
         # A product with no device of its own carries its own props, which

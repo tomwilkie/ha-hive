@@ -51,6 +51,9 @@ async def async_setup_entry(
 class HiveWaterHeater(HiveEntity, WaterHeaterEntity):
     """Hive Water Heater Device."""
 
+    # The hot water shares its thermostat with the heating zone, which is the
+    # device's main entity, so this one carries a name of its own.
+    _attr_translation_key = "hot_water"
     _attr_supported_features = (
         WaterHeaterEntityFeature.ON_OFF | WaterHeaterEntityFeature.OPERATION_MODE
     )
