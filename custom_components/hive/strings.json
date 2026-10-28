@@ -46,6 +46,26 @@
       }
     }
   },
+  "entity": {
+    "binary_sensor": {
+      "heating": {
+        "name": "Boost"
+      },
+      "hot_water": {
+        "name": "Hot water boost"
+      }
+    },
+    "sensor": {
+      "battery": {
+        "name": "Battery level"
+      }
+    },
+    "water_heater": {
+      "hot_water": {
+        "name": "Hot water"
+      }
+    }
+  },
   "services": {
     "boost_heating_off": {
       "description": "Sets the boost mode OFF.",

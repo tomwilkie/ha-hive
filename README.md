@@ -34,6 +34,12 @@ integration's entities of the same name. The light, switch and other sensor and 
 entities the built-in integration created become unavailable and can be deleted from their device
 pages.
 
+Since 0.1.5 the entities are named by Home Assistant from the device registry: the friendly name
+is the device's name followed by the entity's own, such as `Hallway Battery level`, and renaming
+the device renames them all. If you had set a name override on an entity to work around the old
+names, clear it after upgrading (entity settings, **Name**): an override still replaces the whole
+composed name.
+
 To go back to the built-in integration, remove it in HACS and restart.
 
 Requires Home Assistant 2026.10 or later.

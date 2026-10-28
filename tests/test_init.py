@@ -46,6 +46,7 @@ from homeassistant.components.water_heater import (
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
 from homeassistant.const import (
     ATTR_ENTITY_ID,
+    ATTR_FRIENDLY_NAME,
     ATTR_TEMPERATURE,
     SERVICE_TURN_OFF,
     SERVICE_TURN_ON,
@@ -371,6 +372,81 @@ async def test_battery_sensors_are_created_per_device(
     assert [
         entry.unique_id for entry in entries if entry.domain == SENSOR_DOMAIN
     ] == unique_ids
+
+
+@pytest.mark.parametrize(
+    ("domain", "unique_id", "friendly_name"),
+    [
+        pytest.param(CLIMATE_DOMAIN, CLIMATE_UNIQUE_ID, "Thermostat", id="climate"),
+        pytest.param(
+            WATER_HEATER_DOMAIN,
+            WATER_HEATER_UNIQUE_ID,
+            "Thermostat Hot water",
+            id="hot-water",
+        ),
+        pytest.param(
+            BINARY_SENSOR_DOMAIN,
+            HEATING_BOOST_UNIQUE_ID,
+            "Thermostat Boost",
+            id="heating-boost",
+        ),
+        pytest.param(
+            BINARY_SENSOR_DOMAIN,
+            HOT_WATER_BOOST_UNIQUE_ID,
+            "Thermostat Hot water boost",
+            id="hot-water-boost",
+        ),
+        pytest.param(
+            SENSOR_DOMAIN, BATTERY_UNIQUE_ID, "Thermostat Battery level", id="battery"
+        ),
+    ],
+)
+async def test_entities_are_named_from_their_device(
+    hass: HomeAssistant,
+    entity_registry: er.EntityRegistry,
+    mock_hive: MagicMock,
+    mock_config_entry: MockConfigEntry,
+    domain: str,
+    unique_id: str,
+    friendly_name: str,
+) -> None:
+    """Home Assistant composes each friendly name from the device's name and the entity's own."""
+    await setup_entry(hass, mock_config_entry)
+
+    entity_id = entity_registry.async_get_entity_id(domain, DOMAIN, unique_id)
+    assert entity_id
+    entry = entity_registry.async_get(entity_id)
+    assert entry
+    assert entry.has_entity_name is True
+    entity_state = hass.states.get(entity_id)
+    assert entity_state
+    assert entity_state.attributes[ATTR_FRIENDLY_NAME] == friendly_name
+
+
+async def test_renaming_the_device_renames_its_entities(
+    hass: HomeAssistant,
+    device_registry: dr.DeviceRegistry,
+    entity_registry: er.EntityRegistry,
+    mock_hive: MagicMock,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """A device name set by the user carries into its entities' friendly names, with no entity override."""
+    await setup_entry(hass, mock_config_entry)
+    device = device_registry.async_get_device_by_identifier(
+        (DOMAIN, THERMOSTAT_ID), mock_config_entry.entry_id
+    )
+    assert device
+
+    device_registry.async_update_device(device.id, name_by_user="Hallway - Hive")
+    await hass.async_block_till_done()
+
+    entity_id = entity_registry.async_get_entity_id(
+        SENSOR_DOMAIN, DOMAIN, BATTERY_UNIQUE_ID
+    )
+    assert entity_id
+    entity_state = hass.states.get(entity_id)
+    assert entity_state
+    assert entity_state.attributes[ATTR_FRIENDLY_NAME] == "Hallway - Hive Battery level"
 
 
 @pytest.mark.parametrize(

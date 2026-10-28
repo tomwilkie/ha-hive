@@ -1,6 +1,6 @@
 [project]
 name = "ha-hive"
-version = "0.1.4"
+version = "0.1.5"
 description = "Hive integration for Home Assistant"
 requires-python = ">=3.14.2"
 dependencies = []

@@ -67,6 +67,8 @@ async def async_setup_entry(
 class HiveClimateEntity(HiveEntity, ClimateEntity):
     """Hive Climate Device."""
 
+    # The main entity of its device, so it takes the device's name alone.
+    _attr_name = None
     _attr_hvac_modes = [HVACMode.AUTO, HVACMode.HEAT, HVACMode.OFF]
     _attr_preset_modes = [PRESET_BOOST, PRESET_NONE]
     _attr_supported_features = (

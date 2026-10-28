@@ -25,6 +25,7 @@ SCAN_INTERVAL = timedelta(seconds=15)
 # with it the entity, carries over.
 BATTERY_DESCRIPTION = SensorEntityDescription(
     key="Battery",
+    translation_key="battery",
     native_unit_of_measurement=PERCENTAGE,
     device_class=SensorDeviceClass.BATTERY,
     entity_category=EntityCategory.DIAGNOSTIC,
@@ -81,7 +82,6 @@ class HiveBatterySensor(HiveEntity, SensorEntity):
         super().__init__(hass, entry, hive, hive_device)
         self.entity_description = BATTERY_DESCRIPTION
         self._refresh_device = refresh_device
-        self._attr_name = f"{hive_device.device_name} Battery Level"
         self._attr_unique_id = f"{hive_device.device_id}-{BATTERY_DESCRIPTION.key}"
 
     @override
