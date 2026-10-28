@@ -36,6 +36,7 @@ from homeassistant.components.climate import (
     SERVICE_SET_TEMPERATURE,
     HVACMode,
 )
+from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
 from homeassistant.components.water_heater import (
     ATTR_OPERATION_MODE,
     DOMAIN as WATER_HEATER_DOMAIN,
@@ -58,6 +59,7 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 
 from tests.common import (
+    BATTERY_UNIQUE_ID,
     CLIMATE_UNIQUE_ID,
     DEVICE_DATA,
     ENTRY_DATA,
@@ -289,6 +291,86 @@ async def test_boost_binary_sensor_reflects_hive(
     entity_state = hass.states.get(entity_id)
     assert entity_state
     assert entity_state.state == state
+
+
+@pytest.mark.parametrize(
+    ("climate", "state"),
+    [
+        pytest.param(make_climate(), "80", id="charged"),
+        pytest.param(make_climate(battery=15), "15", id="low"),
+        # The receiver is unreachable but the thermostat still reports.
+        pytest.param(make_climate(online=False), "80", id="zone-offline"),
+        # The zone stays online through its receiver when the thermostat dies.
+        pytest.param(
+            make_climate(device_online=False),
+            STATE_UNAVAILABLE,
+            id="thermostat-offline",
+        ),
+    ],
+)
+async def test_battery_sensor_reflects_hive(
+    hass: HomeAssistant,
+    entity_registry: er.EntityRegistry,
+    mock_hive: MagicMock,
+    mock_config_entry: MockConfigEntry,
+    climate: Device,
+    state: str,
+) -> None:
+    """The battery sensor reports the level of the thermostat that carries the heating zone.
+
+    It follows the thermostat's own online flag, not the zone's. The unique
+    ID is core's, so the entity core created carries over.
+    """
+    mock_hive.device_list = make_devices(hub=make_hub(), climate=[climate])
+
+    await setup_entry(hass, mock_config_entry)
+
+    entity_id = entity_registry.async_get_entity_id(
+        SENSOR_DOMAIN, DOMAIN, BATTERY_UNIQUE_ID
+    )
+    assert entity_id
+    entity_state = hass.states.get(entity_id)
+    assert entity_state
+    assert entity_state.state == state
+
+
+@pytest.mark.parametrize(
+    ("climate", "water_heater", "unique_ids"),
+    [
+        pytest.param(
+            [make_climate()],
+            [make_water_heater()],
+            [BATTERY_UNIQUE_ID],
+            id="shared-thermostat",
+        ),
+        pytest.param(
+            [], [make_water_heater()], [BATTERY_UNIQUE_ID], id="hot-water-only"
+        ),
+        pytest.param([make_climate(battery=None)], [], [], id="mains-powered"),
+    ],
+)
+async def test_battery_sensors_are_created_per_device(
+    hass: HomeAssistant,
+    entity_registry: er.EntityRegistry,
+    mock_hive: MagicMock,
+    mock_config_entry: MockConfigEntry,
+    climate: list[Device],
+    water_heater: list[Device],
+    unique_ids: list[str],
+) -> None:
+    """A thermostat gets one battery sensor however many products it carries, and none without a battery."""
+    mock_hive.device_list = make_devices(
+        hub=make_hub(), climate=climate, water_heater=water_heater
+    )
+
+    await setup_entry(hass, mock_config_entry)
+
+    entries = er.async_entries_for_config_entry(
+        entity_registry, mock_config_entry.entry_id
+    )
+    assert [
+        entry.unique_id for entry in entries if entry.domain == SENSOR_DOMAIN
+    ] == unique_ids
 
 
 @pytest.mark.parametrize(

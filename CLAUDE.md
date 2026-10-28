@@ -6,7 +6,7 @@ GitHub Actions.
 This is ha-hive, a custom Home Assistant integration for Hive heating and hot
 water. It is a fork of core's `hive` integration
 (`homeassistant/components/hive`) that uses the owner's hard fork of the Hive
-API library, pyhive-integration (import name `apyhiveapi`). It exists to fix
+API library, apyhiveapi (GitHub `tomwilkie/apyhiveapi`, on PyPI). It exists to fix
 home-assistant/core#182752: a transient network failure at startup must be
 retried, not become a permanent setup error.
 
@@ -26,39 +26,42 @@ retried, not become a permanent setup error.
   code runs on. Raise it when using a newer core API: the code already needs
   2026.10 for `dr.async_get_device_id_by_identifier`, `probatio` and
   `AddConfigEntryEntitiesCallback`.
-- Home Assistant installs the library from the GitHub release wheel named in
-  `manifest.json` `requirements`, written as
-  `<wheel URL>#pyhive-integration==<version>`. That is the URL-with-fragment
-  form Home Assistant keeps for custom integrations
-  (`homeassistant.util.package.parse_requirement_safe`): it compares the
-  fragment with the installed version and, when they differ, hands the whole
-  string to uv, which installs the wheel. hassfest rejects the PEP 508
-  `name @ url` form (it contains a space), and `pyproject.toml` can only take
-  that form, so the two differ in shape; `tests/test_manifest.py` checks
-  that they name the same wheel.
-- Only the climate, water heater and binary sensor platforms exist. The
-  binary sensors are the heating and hot water boost status, keeping core's
-  unique IDs (`f"{hive_id}-Heating_Boost"`, `f"{hive_id}-Hotwater_Boost"`)
-  so core's entities carry over. The light, switch and sensor platforms, and
-  core's other binary sensors, were removed with the library's support for
-  them; code the library has no counterpart for is removed, not kept.
+- Home Assistant installs the library from PyPI, pinned in `manifest.json`
+  `requirements` as `apyhiveapi==<version>`. The `dev` group of
+  `pyproject.toml` carries the same pin so the tests run against the release
+  Home Assistant installs; `tests/test_manifest.py` checks they match. (Up
+  to library v0.1.4 the package was `pyhive-integration`, installed from a
+  GitHub release wheel as `<wheel URL>#pyhive-integration==<version>`.)
+- Only the climate, water heater, binary sensor and sensor platforms exist.
+  The binary sensors are the heating and hot water boost status, keeping
+  core's unique IDs (`f"{hive_id}-Heating_Boost"`, `f"{hive_id}-Hotwater_Boost"`)
+  so core's entities carry over. The one sensor is the battery level of each
+  thermostat and TRV, read from `device_data["battery"]`, one per hardware
+  device under core's unique ID (`f"{device_id}-Battery"`); a device whose
+  props carry no battery gets none, and it is available while the hardware
+  itself is online (`device_online`), not while the zone is. The light and
+  switch platforms, and
+  core's other sensors and binary sensors, were removed with the library's
+  support for them; code the library has no counterpart for is removed, not
+  kept.
 
 ## The library is updated in step
 
-pyhive-integration is the one dependency that matters, and this repository is
-its only consumer.
+apyhiveapi is the one dependency that matters, and this repository is its
+only consumer.
 
-- Local checkout: `~/Documents/repos/pyhive-integration` (GitHub
-  `tomwilkie/pyhive-integration`). In GitHub Actions, where the checkout is
-  not available, fetch raw files from
-  `https://raw.githubusercontent.com/tomwilkie/pyhive-integration/main/src/apyhiveapi/<file>.py`.
+- Local checkout: `~/Documents/repos/apyhiveapi` (GitHub
+  `tomwilkie/apyhiveapi`, formerly `tomwilkie/pyhive-integration`). In GitHub
+  Actions, where the checkout is not available, fetch raw files from
+  `https://raw.githubusercontent.com/tomwilkie/apyhiveapi/main/src/apyhiveapi/<file>.py`.
 - Its `CLAUDE.md` holds the API contract and the error table. Read it before
   changing anything that touches `apyhiveapi`. Its rule mirrors this one:
   when its API changes, this repository is updated alongside.
-- To take a new library release: update the wheel URL and version in
-  `manifest.json` *and* the wheel URL in the `dev` group of `pyproject.toml`
+- To take a new library release: update the `apyhiveapi==` pin in
+  `manifest.json` *and* in the `dev` group of `pyproject.toml`
   (`tests/test_manifest.py` checks they match), run `uv lock`, run the tests,
-  run `scripts/check_requirements`.
+  run `scripts/check_requirements`. Every merge to the library's `main` is
+  released with a patch bump.
 
 What this repository calls, and so what the library must keep:
 
@@ -79,7 +82,10 @@ What this repository calls, and so what the library must keep:
 - `Device`, read as attributes (v0.1.0 dropped the dict-style access that
   v0.0.1 had): `hive_id`, `hive_type`,
   `ha_name`, `device_id`, `device_name`, `device_data` (a dict of the
-  hardware props plus `online`), `parent_device` (None when Hive reported no
+  hardware props plus two flags: `online`, the product's availability, and
+  `device_online`, the hardware's own, added in v0.1.4; `battery` is the
+  level in percent, present only for battery-powered hardware),
+  `parent_device` (None when Hive reported no
   hub), `temperature_unit` (may be None), `status` (a dict), `min_temp`,
   `max_temp`. `status` keys: climate `mode`, `action`,
   `current_temperature`, `target_temperature`, `boost`; water heater
@@ -128,7 +134,7 @@ gaps".
 ## Commands
 
 ```bash
-uv sync                             # Home Assistant, the library wheel and the dev tools
+uv sync                             # Home Assistant, the library and the dev tools
 uv run pytest                       # the full suite, with coverage (fail_under in pyproject.toml)
 uv run pre-commit run --all-files   # ruff, codespell, zizmor, yamllint, uv lock check
 scripts/check_requirements          # install the manifest requirement under core's pins
@@ -149,6 +155,7 @@ custom_components/hive/
 ├── climate.py         ← heating zones and TRV controls
 ├── water_heater.py    ← hot water
 ├── binary_sensor.py   ← heating and hot water boost status
+├── sensor.py          ← battery level of each thermostat and TRV
 ├── services.py        ← boost_heating_on/off and boost_hot_water, registered in async_setup
 ├── const.py, manifest.json, services.yaml, icons.json
 └── strings.json, translations/en.json
