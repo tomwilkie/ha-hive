@@ -33,9 +33,28 @@ CLIMATE_UNIQUE_ID = f"{HEATING_ID}-heating"
 WATER_HEATER_UNIQUE_ID = f"{HOT_WATER_ID}-hotwater"
 HEATING_BOOST_UNIQUE_ID = f"{HEATING_ID}-Heating_Boost"
 HOT_WATER_BOOST_UNIQUE_ID = f"{HOT_WATER_ID}-Hotwater_Boost"
+BATTERY_UNIQUE_ID = f"{THERMOSTAT_ID}-Battery"
 
 _HUB_PROPS = {"model": "Hub", "version": "1.2.3", "manufacturer": "Hive"}
 _THERMOSTAT_PROPS = {"model": "SLT3", "version": "1.2.3", "manufacturer": "Hive"}
+
+
+def _thermostat_props(
+    *, online: bool, device_online: bool, battery: int | None
+) -> dict[str, object]:
+    """Return the thermostat's props as the library copies them into device_data.
+
+    ``online`` is the product's availability, ``device_online`` the
+    thermostat's own. A mains-powered device reports no battery at all.
+    """
+    props: dict[str, object] = {
+        **_THERMOSTAT_PROPS,
+        "online": online,
+        "device_online": device_online,
+    }
+    if battery is not None:
+        props["battery"] = battery
+    return props
 
 
 def make_hub(**props: str) -> Device:
@@ -57,11 +76,14 @@ def make_climate(
     *,
     parent_device: str | None = HUB_ID,
     online: bool = True,
+    device_online: bool = True,
     boost: str | None = "OFF",
+    battery: int | None = 80,
 ) -> Device:
     """Return a heating zone carried by the thermostat.
 
-    It reads 19.5 °C, is set to 21 °C and follows its schedule.
+    It reads 19.5 °C, is set to 21 °C and follows its schedule; the
+    thermostat's battery is at 80%.
     """
     return Device(
         hive_id=HEATING_ID,
@@ -70,7 +92,9 @@ def make_climate(
         ha_type="climate",
         device_id=THERMOSTAT_ID,
         device_name="Thermostat",
-        device_data={**_THERMOSTAT_PROPS, "online": online},
+        device_data=_thermostat_props(
+            online=online, device_online=device_online, battery=battery
+        ),
         parent_device=parent_device,
         ha_name="Heating",
         temperature_unit="C",
@@ -86,7 +110,13 @@ def make_climate(
     )
 
 
-def make_water_heater(*, online: bool = True, boost: str | None = "OFF") -> Device:
+def make_water_heater(
+    *,
+    online: bool = True,
+    device_online: bool = True,
+    boost: str | None = "OFF",
+    battery: int | None = 80,
+) -> Device:
     """Return the hot water, carried by the same thermostat, on its schedule."""
     return Device(
         hive_id=HOT_WATER_ID,
@@ -95,7 +125,9 @@ def make_water_heater(*, online: bool = True, boost: str | None = "OFF") -> Devi
         ha_type="water_heater",
         device_id=THERMOSTAT_ID,
         device_name="Thermostat",
-        device_data={**_THERMOSTAT_PROPS, "online": online},
+        device_data=_thermostat_props(
+            online=online, device_online=device_online, battery=battery
+        ),
         parent_device=HUB_ID,
         ha_name="Hot Water",
         status={"current_operation": "SCHEDULE", "boost": boost},

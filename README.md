@@ -7,9 +7,9 @@ forked from the built-in `hive` integration in
 [home-assistant/core](https://github.com/home-assistant/core/tree/dev/homeassistant/components/hive).
 
 The goal is a simpler, more robust integration: bounded timeouts, retries that Home Assistant can
-see, and errors that propagate instead of being swallowed. The Hive API client lives in
-[tomwilkie/pyhive-integration](https://github.com/tomwilkie/pyhive-integration), a hard fork of
-[Pyhass/Pyhive](https://github.com/Pyhass/Pyhive) installed from its GitHub releases.
+see, and errors that propagate instead of being swallowed. The Hive API client is
+[apyhiveapi](https://github.com/tomwilkie/apyhiveapi), a hard fork of
+[Pyhass/Pyhive](https://github.com/Pyhass/Pyhive) published on PyPI.
 
 ## Provenance
 
@@ -29,9 +29,10 @@ existing config entry, devices and entity IDs.
    tested by Home Assistant`, which confirms that the override loaded.
 
 Only the climate and water heater platforms are provided, plus binary sensors for heating and hot
-water boost, which take over the built-in integration's boost entities. The light, switch, sensor
-and other binary sensor entities the built-in integration created become unavailable and can be
-deleted from their device pages.
+water boost and a battery level sensor for each thermostat and TRV, which take over the built-in
+integration's entities of the same name. The light, switch and other sensor and binary sensor
+entities the built-in integration created become unavailable and can be deleted from their device
+pages.
 
 To go back to the built-in integration, remove it in HACS and restart.
 
@@ -40,7 +41,7 @@ Requires Home Assistant 2026.10 or later.
 ## Development
 
 ```sh
-uv sync                             # Home Assistant, the library wheel and the dev tools
+uv sync                             # Home Assistant, the library and the dev tools
 uv run pytest                       # the full suite, with coverage
 uv run pre-commit run --all-files   # ruff (Home Assistant core's rules), codespell, zizmor, yamllint
 scripts/check_requirements          # install the manifest requirement under core's package pins
