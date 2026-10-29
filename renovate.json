@@ -1,0 +1,24 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "schedule:weekly"],
+  "enabledManagers": ["pep621", "github-actions", "custom.regex"],
+  "labels": ["dependencies"],
+  "minimumReleaseAge": "7 days",
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "The apyhiveapi pin Home Assistant installs; tests/test_manifest.py checks it matches pyproject.toml.",
+      "managerFilePatterns": ["/^custom_components/hive/manifest\\.json$/"],
+      "matchStrings": ["\"apyhiveapi==(?<currentValue>[^\"]+)\""],
+      "depNameTemplate": "apyhiveapi",
+      "datasourceTemplate": "pypi"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Bump the manifest.json and pyproject.toml pins in one PR.",
+      "matchPackageNames": ["apyhiveapi"],
+      "groupName": "apyhiveapi"
+    }
+  ]
+}
