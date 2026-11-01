@@ -29,7 +29,7 @@ existing config entry, devices and entity IDs.
    tested by Home Assistant`, which confirms that the override loaded.
 
 Only the climate and water heater platforms are provided, plus binary sensors for heating and hot
-water boost and a battery level sensor for each thermostat and TRV, which take over the built-in
+water boost and a battery level sensor for each thermostat, which take over the built-in
 integration's entities of the same name. The light, switch and other sensor and binary sensor
 entities the built-in integration created become unavailable and can be deleted from their device
 pages.

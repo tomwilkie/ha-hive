@@ -36,10 +36,10 @@ retried, not become a permanent setup error.
   The binary sensors are the heating and hot water boost status, keeping
   core's unique IDs (`f"{hive_id}-Heating_Boost"`, `f"{hive_id}-Hotwater_Boost"`)
   so core's entities carry over. The one sensor is the battery level of each
-  thermostat and TRV, read from `device_data["battery"]`, one per hardware
-  device under core's unique ID (`f"{device_id}-Battery"`); a device whose
-  props carry no battery gets none, and it is available while the hardware
-  itself is online (`device_online`), not while the zone is. The light and
+  thermostat, read from the hardware `Device`'s `battery`, one per
+  hardware device under core's unique ID (`f"{device_id}-Battery"`); a device
+  with no battery gets none, and it is available while the hardware itself
+  is online (the `Device`'s `online`), not while the zone is. The light and
   switch platforms, and
   core's other sensors and binary sensors, were removed with the library's
   support for them; code the library has no counterpart for is removed, not
@@ -65,52 +65,92 @@ only consumer.
 
 What this repository calls, and so what the library must keep:
 
-- `Hive(websession)`: `start_session(config)`, `update_data()` (async, no
-  arguments, returns bool, raises only `HiveReauthRequired`), `device_list`
-  with the keys `parent`, `climate` and `water_heater`.
-- `hive.heating`: `get_climate`, `set_mode`, `set_target_temperature`,
-  `set_boost_on(device, minutes, temperature)`, `set_boost_off`.
-  `hive.hotwater`: `get_water_heater`, `set_mode`,
-  `set_boost_on(device, minutes)`, `set_boost_off`. Commands return nothing
-  and raise a `HiveError`; a bad argument raises `ValueError`.
+- `Hive(websession)`: `new_session(config)` (sync, sends nothing, raises
+  only `HiveReauthRequired`, for missing tokens or incomplete
+  `device_data`), `get_nodes()` (one `GET /nodes/all`, used for discovery
+  and every poll; returns `Nodes` or raises a `HiveError`, including
+  `HiveConnectionError` for a reply with no products or no devices).
+- Commands, each one `POST` that returns nothing or raises a `HiveError`:
+  `set_mode(product, mode)` (`Mode`: `SCHEDULE` / `MANUAL` / `OFF`),
+  `set_target_temperature(heating_product, target)`,
+  `set_heating_boost(heating_product, minutes, target)`,
+  `set_hot_water_boost(hot_water_product, minutes)`. There is no boost-off
+  call, and the library checks no argument values.
 - `Auth(username=, password=)`: `login`, `sms_2fa(code, challenge)`,
   `device_registration(name)`, `get_device_data()` (sync; the three device
   credentials, stored whole as `device_data` in the config entry; v0.0.1
   added the token issue time, which v0.1.0 accepts and ignores),
   `is_device_registered()`,
   `forget_device(access_token, device_key)`.
-- `Device`, read as attributes (v0.1.0 dropped the dict-style access that
-  v0.0.1 had): `hive_id`, `hive_type`,
-  `ha_name`, `device_id`, `device_name`, `device_data` (a dict of the
-  hardware props plus two flags: `online`, the product's availability, and
-  `device_online`, the hardware's own, added in v0.1.4; `battery` is the
-  level in percent, present only for battery-powered hardware),
-  `parent_device` (None when Hive reported no
-  hub), `temperature_unit` (may be None), `status` (a dict), `min_temp`,
-  `max_temp`. `status` keys: climate `mode`, `action`,
-  `current_temperature`, `target_temperature`, `boost`; water heater
-  `current_operation`, `boost`. Any value may be None.
+- The frozen dataclasses `get_nodes` returns, read as attributes. Fields
+  keep Hive's names and raw values; a missing or wrong-typed value is None.
+  - `Nodes`: `user` (`User`: `temperature_unit`), `products` (by ID) and
+    `devices` (by ID).
+  - `HeatingProduct` (`heating`): `id`, `type`, `name`, `online`, `model`,
+    `version`, `zone`, `temperature`, `working`,
+    `mode` (can be `BOOST`), `target`, `boost` (minutes), `previous_mode`
+    (`False` means OFF).
+  - `HotWaterProduct` (`hotwater`): `id`, `type`, `name`, `online`, `model`,
+    `version`, `zone`, `mode`, `boost`, `previous_mode`.
+  - `Device` (`hub`, `thermostatui`, `boilermodule`): `id`, `type`,
+    `name`, `online`, `model`, `manufacturer`, `version`, `zone`, `battery`,
+    `mac_address`.
 - From `apyhiveapi`: `HiveError`, `HiveConnectionError`, `HiveApiError`,
-  `HiveDeviceOffline`, `HiveReauthRequired` and its subclasses
-  `HiveInvalidUsername`, `HiveInvalidPassword`, `HiveInvalid2FACode`;
-  `SMS_REQUIRED`.
+  `HiveReauthRequired` and its subclasses `HiveInvalidUsername`,
+  `HiveInvalidPassword`, `HiveInvalid2FACode`; `SMS_REQUIRED`; `Mode`.
+
+## From Hive's model to Home Assistant's
+
+The library knows nothing about Home Assistant; this repository does the
+mapping.
+
+- **Polling**: one `HiveDataUpdateCoordinator` per entry (`coordinator.py`)
+  calls `get_nodes()` every 120 s, with `always_update=False`. Entities are
+  `CoordinatorEntity`s and read the latest snapshot. After a command,
+  `refresh_system` calls `async_request_refresh()`, which is debounced:
+  Hive's gateway returns 403 for 1-2 minutes after a burst of about 25
+  requests.
+- **Degraded replies** (apyhiveapi #20): a product Hive sends with no `mode`
+  (its state holds only `name`) is replaced by its last good snapshot, for
+  up to `MAX_DEGRADED_POLLS` (5) polls in a row; after that it is shown as
+  sent, so a real outage shows.
+- **Discovery** happens once, from the first refresh; products that appear
+  later wait for a reload. Heating and hot water attach to the
+  `thermostatui` in their zone, or are their own device when there is none.
+  Device info comes from the attached `Device`, or from
+  the product (with no manufacturer) when it is its own device; `via_device`
+  is the hub. Hive's `Receiver` is shown as `Heating`.
+- **State**: while `mode` is `BOOST`, the mode shown is `previous_mode`
+  (`False` is OFF), and the boost is active while `boost` is truthy; a
+  boosting climate entity shows HEAT. Hot water `MANUAL` is shown as on.
+  Climate temperatures are `temperature` (to 1 decimal) and `target`,
+  limits 5-32, in `user.temperature_unit`.
+- **Availability**: climate, water heater and boost sensors while the
+  product's `online` is true; the
+  battery sensor while its hardware's `online` is true. A failed refresh
+  keeps the last snapshot, so entities keep their last state.
+- **Commands**: arguments are checked here (boost minutes > 0, boost target
+  5-32). Ending a boost is `set_mode(product, previous_mode)`, sent only
+  while a boost is active. The old library also restored the previous target
+  when returning to MANUAL or OFF; that waits for `set_mode` to take a
+  target.
 
 ## Error mapping
 
 | Where | Library raises | This repository does |
 |---|---|---|
-| `async_setup_entry` | `HiveReauthRequired` | `ConfigEntryAuthFailed`: Home Assistant starts the reauth flow |
-| | `HiveConnectionError` | `ConfigEntryNotReady`: retried with backoff (the #182752 fix) |
+| `new_session`, any refresh | `HiveReauthRequired` | `ConfigEntryAuthFailed`: Home Assistant starts the reauth flow |
+| first refresh | `HiveConnectionError` | `UpdateFailed`, so `ConfigEntryNotReady`: retried with backoff (the #182752 fix) |
 | | any other `HiveError` | `ConfigEntryError` |
+| later refreshes | any other `HiveError` | `UpdateFailed`: the last state is kept |
 | commands, via `refresh_system` | `HiveError` | `HomeAssistantError` |
-| | `ValueError` | `ServiceValidationError` |
+| | an invalid argument (checked here) | `ServiceValidationError` |
 | config flow (login, 2FA, resend, registration) | `HiveInvalidUsername` / `HiveInvalidPassword` / `HiveInvalid2FACode` | form error `invalid_username` / `invalid_password` / `invalid_code` |
 | | `HiveConnectionError` | form error `no_internet_available` |
 | | any other `HiveError` | form error `unknown`, logged at ERROR |
 
-Home Assistant logs setup failures itself: raise, do not log and raise.
-Polling (`async_update`) does not catch `HiveReauthRequired` yet; see "Known
-gaps".
+Home Assistant logs setup and refresh failures itself: raise, do not log
+and raise.
 
 ## Project rules
 
@@ -148,14 +188,17 @@ only publish moving branches and are meant to track current validation rules.
 
 ```text
 custom_components/hive/
-├── __init__.py        ← async_setup_entry: start_session → ConfigEntry* mapping,
-│                        the hub device; refresh_system wraps every command
+├── __init__.py        ← async_setup_entry: new_session, first refresh, the hub
+│                        device; refresh_system wraps every command
+├── coordinator.py     ← HiveDataUpdateCoordinator: get_nodes, error mapping,
+│                        degraded replies
 ├── config_flow.py     ← login, SMS 2FA, device registration, reauth
-├── entity.py          ← HiveEntity: unique_id, device info, via_device, refresh signal
-├── climate.py         ← heating zones and TRV controls
+├── entity.py          ← HiveEntity: discovery, unique_id, device info, via_device,
+│                        availability, ending a boost
+├── climate.py         ← heating zones
 ├── water_heater.py    ← hot water
 ├── binary_sensor.py   ← heating and hot water boost status
-├── sensor.py          ← battery level of each thermostat and TRV
+├── sensor.py          ← battery level of each thermostat
 ├── services.py        ← boost_heating_on/off and boost_hot_water, registered in async_setup
 ├── const.py, manifest.json, services.yaml, icons.json
 └── strings.json, translations/en.json
@@ -166,11 +209,9 @@ scripts/check_requirements
 
 ## Known gaps
 
-- `update_data()` raising `HiveReauthRequired` during polling, or a command
-  raising it, is not turned into a reauth flow: it propagates and is logged on
-  every poll (since v0.1.0 the library does not contact Cognito again for
-  it, so the cost is the log line). Needs `entry.async_start_reauth(hass)`
-  in the entities.
+- A command raising `HiveReauthRequired` is reported as a
+  `HomeAssistantError`, not turned into a reauth flow; the next poll starts
+  one.
 - Refreshed tokens are never written back to the config entry (Pyhive#123):
   the library treats saved tokens as due for a refresh, so every start
   refreshes them. Needs a token-updated hook in the library.

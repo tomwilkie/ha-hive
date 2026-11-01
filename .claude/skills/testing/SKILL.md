@@ -19,11 +19,13 @@ differs from the repo, follow the repo:
   `device_registry` and `entity_registry` fixtures and `MockConfigEntry`.
   `enable_custom_integrations` is applied automatically (`tests/conftest.py`).
 - Mock at the `apyhiveapi` boundary only. The fixtures in `tests/conftest.py`
-  do that: `mock_hive` patches `Hive`, `mock_auth` (and `mock_auth_class`)
-  patch `Auth` in the config flow, `mock_setup_entry` patches
-  `async_setup_entry`. Build devices with `make_hub()`, `make_climate()`,
-  `make_water_heater()` and `make_devices()` from `tests/common.py`, and set
-  an entry up with `setup_entry()`. Do not build new mocks of the library.
+  do that: `mock_hive` patches `Hive` with `autospec=True` (so a renamed
+  method fails), `mock_auth` (and `mock_auth_class`) patch `Auth` in the
+  config flow, `mock_setup_entry` patches `async_setup_entry`. Build the
+  snapshot `get_nodes` returns with `make_nodes()` and the library's real
+  dataclasses (`HUB`, `THERMOSTAT`, `HEATING`, ... in `tests/common.py`,
+  varied with `dataclasses.replace`), set an entry up with `setup_entry()`
+  and let a poll interval pass with `poll()`. Do not mock the dataclasses.
 - Drive the integration the way Home Assistant does: config entries, flows,
   services and states. Do not call entity methods or read `_attr_*`.
 - Mock with `unittest.mock` (`MagicMock`, `AsyncMock`, `patch`); pytest-mock
@@ -89,7 +91,7 @@ and the outcome is read back the way Home Assistant exposes it.
         ),
     ],
 )
-async def test_failed_session_start_sets_the_entry_state(
+async def test_failed_setup_sets_the_entry_state(
     hass: HomeAssistant,
     mock_hive: MagicMock,
     mock_auth: MagicMock,
@@ -99,7 +101,7 @@ async def test_failed_session_start_sets_the_entry_state(
     flow_sources: list[str],
 ) -> None:
     """A rejected login starts a reauth flow; a transient failure is retried."""
-    mock_hive.start_session.side_effect = error
+    mock_hive.get_nodes.side_effect = error
     mock_auth.login.side_effect = HiveInvalidPassword()
 
     await setup_entry(hass, mock_config_entry)

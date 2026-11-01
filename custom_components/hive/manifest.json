@@ -12,7 +12,7 @@
   "issue_tracker": "https://github.com/tomwilkie/ha-hive/issues",
   "loggers": ["apyhiveapi"],
   "requirements": [
-    "apyhiveapi==0.1.5"
+    "apyhiveapi==0.2.1"
   ],
   "version": "0.1.5"
 }

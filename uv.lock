@@ -287,16 +287,16 @@ wheels = [
 
 [[package]]
 name = "apyhiveapi"
-version = "0.1.5"
+version = "0.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
     { name = "boto3" },
     { name = "botocore" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/bc/3a/27dc5c12e38923125d221d2ada7824152c37e3e775fed8cbe60c213b037b/apyhiveapi-0.1.5.tar.gz", hash = "sha256:9bc96b29eb5508982a028b88552bc7d597c98292b8bf1dfc6f4829ffabc356de", size = 38866, upload-time = "2026-10-28T14:36:54.627Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ba/dc/9be371e081da068384ddd532a7388e827c603ea311906ce11e9f8a6271f2/apyhiveapi-0.2.1.tar.gz", hash = "sha256:61a3877d3f84415def12114b49e463751cc267bbb30751f87427c5ee2c53634f", size = 33561, upload-time = "2026-11-01T22:06:34.126Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3e/32/614f6ece571e3b5a0ad949b808146debe00b5fd2688e864858d926d0cb26/apyhiveapi-0.1.5-py3-none-any.whl", hash = "sha256:7bd44ed9028c7492dd522294cb4455e15cb39c01730f3538d1bb19a50b5613a2", size = 38206, upload-time = "2026-10-28T14:36:52.857Z" },
+    { url = "https://files.pythonhosted.org/packages/21/5e/6b30783a5bdfb88c8efe876eef796688072b50703d56584885e4a261445b/apyhiveapi-0.2.1-py3-none-any.whl", hash = "sha256:abece2ad048bc128a06844d8abb0500f344cf51d9a5844493270d0d3eeec7f64", size = 31345, upload-time = "2026-11-01T22:06:32.717Z" },
 ]
 
 [[package]]
@@ -1182,7 +1182,7 @@ dev = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "apyhiveapi", specifier = "==0.1.5" },
+    { name = "apyhiveapi", specifier = "==0.2.1" },
     { name = "pre-commit" },
     { name = "pytest-homeassistant-custom-component", specifier = "==0.13.373" },
 ]
