@@ -7,18 +7,18 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "The apyhiveapi pin Home Assistant installs; tests/test_manifest.py checks it matches pyproject.toml.",
+      "description": "The hiveheating pin Home Assistant installs; tests/test_manifest.py checks it matches pyproject.toml.",
       "managerFilePatterns": ["/^custom_components/hive/manifest\\.json$/"],
-      "matchStrings": ["\"apyhiveapi==(?<currentValue>[^\"]+)\""],
-      "depNameTemplate": "apyhiveapi",
+      "matchStrings": ["\"hiveheating==(?<currentValue>[^\"]+)\""],
+      "depNameTemplate": "hiveheating",
       "datasourceTemplate": "pypi"
     }
   ],
   "packageRules": [
     {
       "description": "Bump the manifest.json and pyproject.toml pins in one PR.",
-      "matchPackageNames": ["apyhiveapi"],
-      "groupName": "apyhiveapi"
+      "matchPackageNames": ["hiveheating"],
+      "groupName": "hiveheating"
     }
   ]
 }

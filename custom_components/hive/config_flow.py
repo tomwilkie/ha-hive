@@ -4,7 +4,7 @@ from collections.abc import Mapping
 import logging
 from typing import Any, override
 
-from apyhiveapi import (
+from hiveheating import (
     SMS_REQUIRED,
     Auth,
     HiveConnectionError,

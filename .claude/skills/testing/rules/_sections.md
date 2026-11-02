@@ -4,7 +4,7 @@
 **Impact:** CRITICAL
 
 Mock external boundaries only.
-Covers what to mock (the `Hive` session and `Auth` client from `apyhiveapi`) and what not to (the integration's own entities, flows and services).
+Covers what to mock (the `Hive` session and `Auth` client from `hiveheating`) and what not to (the integration's own entities, flows and services).
 
 **Rules:**
 - `mock-boundaries` - Mock external boundaries, not internal logic

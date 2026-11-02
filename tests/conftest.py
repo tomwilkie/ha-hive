@@ -8,15 +8,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.hive.const import DOMAIN
 
-from tests.common import (
-    ENTRY_DATA,
-    USERNAME,
-    make_climate,
-    make_devices,
-    make_hub,
-    make_mock_hive,
-    make_water_heater,
-)
+from tests.common import ENTRY_DATA, USERNAME, make_nodes
 
 
 @pytest.fixture(autouse=True)
@@ -34,18 +26,16 @@ def mock_config_entry() -> MockConfigEntry:
 
 @pytest.fixture
 def mock_hive() -> Generator[MagicMock]:
-    """Patch the Hive session with a hub, one heating zone and hot water.
+    """Patch the Hive session; it reports a hub, one heating zone and hot water.
 
-    Replace ``mock_hive.device_list`` before setting up the entry to test
+    The mock has the library's real methods, so a renamed one fails. Set
+    ``mock_hive.get_nodes.return_value`` before setting up the entry to test
     another account shape.
     """
-    devices = make_devices(
-        hub=make_hub(), climate=[make_climate()], water_heater=[make_water_heater()]
-    )
-    with patch(
-        "custom_components.hive.Hive", return_value=make_mock_hive(devices)
-    ) as mock_hive_class:
-        yield mock_hive_class.return_value
+    with patch("custom_components.hive.Hive", autospec=True) as mock_hive_class:
+        mock_hive = mock_hive_class.return_value
+        mock_hive.get_nodes.return_value = make_nodes()
+        yield mock_hive
 
 
 @pytest.fixture

@@ -24,4 +24,4 @@ echo "Installing under the Home Assistant ${ha_version} constraints:"
 cat "$workdir/requirements.txt"
 uv venv --quiet --python 3.14 "$workdir/venv"
 uv pip install --quiet --python "$workdir/venv/bin/python" --constraint "$workdir/constraints.txt" --requirement "$workdir/requirements.txt"
-"$workdir/venv/bin/python" -c 'import apyhiveapi; print(f"apyhiveapi imported from {apyhiveapi.__file__}")'
+"$workdir/venv/bin/python" -c 'import hiveheating; print(f"hiveheating imported from {hiveheating.__file__}")'

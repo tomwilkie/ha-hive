@@ -8,7 +8,7 @@ forked from the built-in `hive` integration in
 
 The goal is a simpler, more robust integration: bounded timeouts, retries that Home Assistant can
 see, and errors that propagate instead of being swallowed. The Hive API client is
-[apyhiveapi](https://github.com/tomwilkie/apyhiveapi), a hard fork of
+[hiveheating](https://github.com/tomwilkie/hiveheating), a hard fork of
 [Pyhass/Pyhive](https://github.com/Pyhass/Pyhive) published on PyPI.
 
 ## Provenance
@@ -29,7 +29,7 @@ existing config entry, devices and entity IDs.
    tested by Home Assistant`, which confirms that the override loaded.
 
 Only the climate and water heater platforms are provided, plus binary sensors for heating and hot
-water boost and a battery level sensor for each thermostat and TRV, which take over the built-in
+water boost and a battery level sensor for each thermostat, which take over the built-in
 integration's entities of the same name. The light, switch and other sensor and binary sensor
 entities the built-in integration created become unavailable and can be deleted from their device
 pages.
