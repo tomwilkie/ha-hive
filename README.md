@@ -8,7 +8,7 @@ forked from the built-in `hive` integration in
 
 The goal is a simpler, more robust integration: bounded timeouts, retries that Home Assistant can
 see, and errors that propagate instead of being swallowed. The Hive API client is
-[apyhiveapi](https://github.com/tomwilkie/apyhiveapi), a hard fork of
+[hiveheating](https://github.com/tomwilkie/hiveheating), a hard fork of
 [Pyhass/Pyhive](https://github.com/Pyhass/Pyhive) published on PyPI.
 
 ## Provenance

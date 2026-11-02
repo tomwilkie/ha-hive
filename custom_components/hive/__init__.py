@@ -4,7 +4,7 @@ from collections.abc import Awaitable, Callable, Coroutine
 from functools import wraps
 from typing import Any, Concatenate
 
-from apyhiveapi import Auth, Hive, HiveError, HiveReauthRequired
+from hiveheating import Auth, Hive, HiveError, HiveReauthRequired
 
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError

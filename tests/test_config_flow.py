@@ -2,7 +2,7 @@
 
 from unittest.mock import AsyncMock, MagicMock
 
-from apyhiveapi import (
+from hiveheating import (
     HiveApiError,
     HiveConnectionError,
     HiveError,

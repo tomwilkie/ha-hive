@@ -4,7 +4,7 @@ from dataclasses import replace
 from datetime import timedelta
 import logging
 
-from apyhiveapi import (
+from hiveheating import (
     Hive,
     HiveConnectionError,
     HiveError,
@@ -35,7 +35,7 @@ def _is_degraded(product: Product) -> bool:
     """Return whether Hive sent the product's state without its mode.
 
     Every so often Hive answers with a product whose state holds only its
-    name (apyhiveapi issue #20); the reply also misreports it as offline.
+    name (hiveheating issue #20); the reply also misreports it as offline.
     """
     return product.mode is None
 

@@ -3,7 +3,7 @@
 import logging
 from typing import Any, override
 
-from apyhiveapi import HeatingProduct
+from hiveheating import HeatingProduct
 
 from homeassistant.components.climate import (
     ATTR_HVAC_MODE,

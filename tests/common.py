@@ -7,8 +7,8 @@ setup. Fixtures live in conftest.py.
 
 from collections.abc import Iterable
 
-from apyhiveapi import Device, HeatingProduct, HotWaterProduct, Nodes, Product, User
 from freezegun.api import FrozenDateTimeFactory
+from hiveheating import Device, HeatingProduct, HotWaterProduct, Nodes, Product, User
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,

@@ -6,7 +6,7 @@ GitHub Actions.
 This is ha-hive, a custom Home Assistant integration for Hive heating and hot
 water. It is a fork of core's `hive` integration
 (`homeassistant/components/hive`) that uses the owner's hard fork of the Hive
-API library, apyhiveapi (GitHub `tomwilkie/apyhiveapi`, on PyPI). It exists to fix
+API library, hiveheating (GitHub `tomwilkie/hiveheating`, on PyPI). It exists to fix
 home-assistant/core#182752: a transient network failure at startup must be
 retried, not become a permanent setup error.
 
@@ -27,11 +27,18 @@ retried, not become a permanent setup error.
   2026.10 for `dr.async_get_device_id_by_identifier`, `probatio` and
   `AddConfigEntryEntitiesCallback`.
 - Home Assistant installs the library from PyPI, pinned in `manifest.json`
-  `requirements` as `apyhiveapi==<version>`. The `dev` group of
+  `requirements` as `hiveheating==<version>`. The `dev` group of
   `pyproject.toml` carries the same pin so the tests run against the release
   Home Assistant installs; `tests/test_manifest.py` checks they match. (Up
   to library v0.1.4 the package was `pyhive-integration`, installed from a
-  GitHub release wheel as `<wheel URL>#pyhive-integration==<version>`.)
+  GitHub release wheel as `<wheel URL>#pyhive-integration==<version>`; from
+  v0.1.4 to v0.2.1 it was `apyhiveapi`.)
+- The library's import name must not be `apyhiveapi` or `pyhiveapi`. The
+  Home Assistant image comes with core's `pyhive-integration` installed,
+  which provides both; pip unpacks a second package of the same name into
+  the same folder, and upstream's leftover files shadow ours (upstream's
+  `apyhiveapi/api/` hid our `api.py`, so the config flow failed to load).
+  That is why the library is now `hiveheating`.
 - Only the climate, water heater, binary sensor and sensor platforms exist.
   The binary sensors are the heating and hot water boost status, keeping
   core's unique IDs (`f"{hive_id}-Heating_Boost"`, `f"{hive_id}-Hotwater_Boost"`)
@@ -47,17 +54,18 @@ retried, not become a permanent setup error.
 
 ## The library is updated in step
 
-apyhiveapi is the one dependency that matters, and this repository is its
+hiveheating is the one dependency that matters, and this repository is its
 only consumer.
 
-- Local checkout: `~/Documents/repos/apyhiveapi` (GitHub
-  `tomwilkie/apyhiveapi`, formerly `tomwilkie/pyhive-integration`). In GitHub
+- Local checkout: `~/Documents/repos/hiveheating` (GitHub
+  `tomwilkie/hiveheating`, formerly `tomwilkie/apyhiveapi` and
+  `tomwilkie/pyhive-integration`). In GitHub
   Actions, where the checkout is not available, fetch raw files from
-  `https://raw.githubusercontent.com/tomwilkie/apyhiveapi/main/src/apyhiveapi/<file>.py`.
+  `https://raw.githubusercontent.com/tomwilkie/hiveheating/main/src/hiveheating/<file>.py`.
 - Its `CLAUDE.md` holds the API contract and the error table. Read it before
-  changing anything that touches `apyhiveapi`. Its rule mirrors this one:
+  changing anything that touches `hiveheating`. Its rule mirrors this one:
   when its API changes, this repository is updated alongside.
-- To take a new library release: update the `apyhiveapi==` pin in
+- To take a new library release: update the `hiveheating==` pin in
   `manifest.json` *and* in the `dev` group of `pyproject.toml`
   (`tests/test_manifest.py` checks they match), run `uv lock`, run the tests,
   run `scripts/check_requirements`. Every merge to the library's `main` is
@@ -95,7 +103,7 @@ What this repository calls, and so what the library must keep:
   - `Device` (`hub`, `thermostatui`, `boilermodule`): `id`, `type`,
     `name`, `online`, `model`, `manufacturer`, `version`, `zone`, `battery`,
     `mac_address`.
-- From `apyhiveapi`: `HiveError`, `HiveConnectionError`, `HiveApiError`,
+- From `hiveheating`: `HiveError`, `HiveConnectionError`, `HiveApiError`,
   `HiveReauthRequired` and its subclasses `HiveInvalidUsername`,
   `HiveInvalidPassword`, `HiveInvalid2FACode`; `SMS_REQUIRED`; `Mode`.
 
@@ -110,7 +118,7 @@ mapping.
   `refresh_system` calls `async_request_refresh()`, which is debounced:
   Hive's gateway returns 403 for 1-2 minutes after a burst of about 25
   requests.
-- **Degraded replies** (apyhiveapi #20): a product Hive sends with no `mode`
+- **Degraded replies** (hiveheating #20): a product Hive sends with no `mode`
   (its state holds only `name`) is replaced by its last good snapshot, for
   up to `MAX_DEGRADED_POLLS` (5) polls in a row; after that it is shown as
   sent, so a real outage shows.
@@ -161,7 +169,7 @@ and raise.
   use `probatio`, not voluptuous.
 - Never log tokens, passwords or `device_data`. The library's messages are
   already sanitised and this repository logs no payloads.
-- Every bug fix comes with a test. Tests mock at the `apyhiveapi` boundary
+- Every bug fix comes with a test. Tests mock at the `hiveheating` boundary
   only (`Hive` in `custom_components.hive`, `Auth` in
   `custom_components.hive.config_flow`) and drive the integration through
   config entries, flows, services and states, never entity internals. Follow

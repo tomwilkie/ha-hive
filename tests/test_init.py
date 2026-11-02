@@ -3,7 +3,8 @@
 from dataclasses import replace
 from unittest.mock import MagicMock, call, patch
 
-from apyhiveapi import (
+from freezegun.api import FrozenDateTimeFactory
+from hiveheating import (
     Device,
     HiveApiError,
     HiveConnectionError,
@@ -12,7 +13,6 @@ from apyhiveapi import (
     HiveReauthRequired,
     Nodes,
 )
-from freezegun.api import FrozenDateTimeFactory
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -84,7 +84,7 @@ from tests.common import (
 )
 
 # Hive's reply when it sends a product's state with only its name
-# (apyhiveapi issue #20): the state fields are None and it reads offline.
+# (hiveheating issue #20): the state fields are None and it reads offline.
 DEGRADED_HEATING = replace(
     HEATING,
     online=False,

@@ -3,7 +3,7 @@
 from collections.abc import Iterator
 from typing import cast, override
 
-from apyhiveapi import Device, Mode, Nodes, Product
+from hiveheating import Device, Mode, Nodes, Product
 
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import device_registry as dr
@@ -175,5 +175,5 @@ class HiveEntity(CoordinatorEntity[HiveDataUpdateCoordinator]):
             )
         # TODO: the old library also restored the previous target (or 7)
         # when returning to MANUAL or OFF; that waits for set_mode to take a
-        # target in apyhiveapi.
+        # target in hiveheating.
         await self.hive.set_mode(product, cast(Mode, mode))

@@ -2,7 +2,7 @@
 
 from typing import Any, override
 
-from apyhiveapi import HotWaterProduct
+from hiveheating import HotWaterProduct
 
 from homeassistant.components.water_heater import (
     STATE_ECO,

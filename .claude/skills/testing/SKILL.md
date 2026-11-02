@@ -18,7 +18,7 @@ differs from the repo, follow the repo:
 - The tests run under pytest-homeassistant-custom-component: use its `hass`,
   `device_registry` and `entity_registry` fixtures and `MockConfigEntry`.
   `enable_custom_integrations` is applied automatically (`tests/conftest.py`).
-- Mock at the `apyhiveapi` boundary only. The fixtures in `tests/conftest.py`
+- Mock at the `hiveheating` boundary only. The fixtures in `tests/conftest.py`
   do that: `mock_hive` patches `Hive` with `autospec=True` (so a renamed
   method fails), `mock_auth` (and `mock_auth_class`) patch `Auth` in the
   config flow, `mock_setup_entry` patches `async_setup_entry`. Build the

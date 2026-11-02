@@ -9,7 +9,7 @@ REPO = Path(__file__).resolve().parent.parent
 INTEGRATION = REPO / "custom_components" / "hive"
 
 # The library pinned to one PyPI release, the form hassfest requires.
-MANIFEST_REQUIREMENT = re.compile(r"^apyhiveapi==(?P<version>[\w.]+)$")
+MANIFEST_REQUIREMENT = re.compile(r"^hiveheating==(?P<version>[\w.]+)$")
 
 
 def _key_tree(node: object) -> object:
@@ -34,7 +34,7 @@ def test_dev_dependency_installs_the_manifest_release() -> None:
     dev_requirements = [
         requirement
         for requirement in pyproject["dependency-groups"]["dev"]
-        if isinstance(requirement, str) and requirement.startswith("apyhiveapi")
+        if isinstance(requirement, str) and requirement.startswith("hiveheating")
     ]
 
     assert dev_requirements == [_manifest_requirement()]

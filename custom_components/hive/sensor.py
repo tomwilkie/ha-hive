@@ -2,7 +2,7 @@
 
 from typing import override
 
-from apyhiveapi import Device, Product
+from hiveheating import Device, Product
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,

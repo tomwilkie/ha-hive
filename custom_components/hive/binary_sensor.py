@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from apyhiveapi import Device, Product
+from hiveheating import Device, Product
 
 from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
