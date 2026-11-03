@@ -2,6 +2,7 @@
 
 from collections.abc import Awaitable, Callable, Coroutine
 from functools import wraps
+import logging
 from typing import Any, Concatenate
 
 from hiveheating import Auth, Hive, HiveError, HiveReauthRequired
@@ -19,6 +20,8 @@ from .const import DOMAIN, PLATFORMS
 from .coordinator import HiveConfigEntry, HiveDataUpdateCoordinator
 from .entity import HiveEntity, display_name, find_hub
 from .services import async_setup_services
+
+_LOGGER = logging.getLogger(__name__)
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
@@ -69,12 +72,25 @@ async def async_unload_entry(hass: HomeAssistant, entry: HiveConfigEntry) -> boo
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: HiveConfigEntry) -> None:
-    """Remove a config entry."""
-    hive = Auth(entry.data["username"], entry.data["password"])
-    await hive.forget_device(
-        entry.data["tokens"]["AuthenticationResult"]["AccessToken"],
-        entry.data["device_data"][1],
+    """Remove a config entry, and ask Hive to forget its trusted device.
+
+    The access token saved at setup has usually expired, so the refresh
+    token, which is tied to the trusted device, gets a fresh one first.
+    """
+    device_key = entry.data["device_data"][1]
+    auth = Auth(
+        entry.data["username"],
+        entry.data["password"],
+        device_key=device_key,
+        websession=aiohttp_client.async_get_clientsession(hass),
     )
+    try:
+        await auth.refresh_token(
+            entry.data["tokens"]["AuthenticationResult"]["RefreshToken"]
+        )
+        await auth.forget_device(auth.access_token, device_key)
+    except HiveError as err:
+        _LOGGER.warning("Could not ask Hive to forget the device: %s", err)
 
 
 async def async_remove_config_entry_device(

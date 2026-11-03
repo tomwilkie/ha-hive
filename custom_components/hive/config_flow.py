@@ -5,18 +5,19 @@ import logging
 from typing import Any, override
 
 from hiveheating import (
-    SMS_REQUIRED,
     Auth,
     HiveConnectionError,
     HiveError,
     HiveInvalid2FACode,
     HiveInvalidPassword,
     HiveInvalidUsername,
+    LoginResult,
 )
 import probatio
 
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import CONF_CODE, CONF_DEVICE_NAME, CONFIG_ENTRY_VERSION, DOMAIN
 
@@ -32,7 +33,7 @@ class HiveFlowHandler(ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         """Initialize the config flow."""
         self.data: dict[str, Any] = {}
-        self.tokens: dict[str, Any] = {}
+        self.login_result = LoginResult({})
         self.device_registration: bool = False
         self.device_name = "Home Assistant"
 
@@ -49,6 +50,7 @@ class HiveFlowHandler(ConfigFlow, domain=DOMAIN):
             self.hive_auth = Auth(
                 username=username,
                 password=self.data[CONF_PASSWORD],
+                websession=async_get_clientsession(self.hass),
             )
 
             # Get user from existing entry and abort if already setup
@@ -58,7 +60,7 @@ class HiveFlowHandler(ConfigFlow, domain=DOMAIN):
 
             # Login to the Hive.
             try:
-                self.tokens = await self.hive_auth.login()
+                self.login_result = await self.hive_auth.login()
             except HiveInvalidUsername:
                 errors["base"] = "invalid_username"
             except HiveInvalidPassword:
@@ -69,14 +71,12 @@ class HiveFlowHandler(ConfigFlow, domain=DOMAIN):
                 _LOGGER.error("Hive login failed: %s", err)
                 errors["base"] = "unknown"
 
-            if (
-                auth_result := self.tokens.get("AuthenticationResult", {})
-            ) and auth_result.get("NewDeviceMetadata"):
+            if self.login_result.new_device:
                 _LOGGER.debug("Login successful, New device detected")
                 self.device_registration = True
                 return await self.async_step_configuration()
 
-            if self.tokens.get("ChallengeName") == SMS_REQUIRED:
+            if self.login_result.sms_required:
                 _LOGGER.debug("Login successful, SMS 2FA required")
                 # Complete SMS 2FA.
                 return await self.async_step_2fa()
@@ -109,7 +109,7 @@ class HiveFlowHandler(ConfigFlow, domain=DOMAIN):
         if user_input and user_input["2fa"] == "0000":
             # Log in again so that Hive sends a new code.
             try:
-                self.tokens = await self.hive_auth.login()
+                self.login_result = await self.hive_auth.login()
             except HiveConnectionError:
                 errors["base"] = "no_internet_available"
             except HiveError as err:
@@ -117,8 +117,8 @@ class HiveFlowHandler(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "unknown"
         elif user_input:
             try:
-                self.tokens = await self.hive_auth.sms_2fa(
-                    user_input["2fa"], self.tokens
+                self.login_result = await self.hive_auth.sms_2fa(
+                    user_input["2fa"], self.login_result
                 )
             except HiveInvalid2FACode:
                 errors["base"] = "invalid_code"
@@ -197,12 +197,12 @@ class HiveFlowHandler(ConfigFlow, domain=DOMAIN):
     async def async_setup_hive_entry(self) -> ConfigFlowResult:
         """Finish setup and create the config entry."""
 
-        if "AuthenticationResult" not in self.tokens:
+        if not self.login_result.complete:
             raise UnknownHiveError
 
         # Setup the config entry
         _LOGGER.debug("Setting up Hive entry")
-        self.data["tokens"] = self.tokens
+        self.data["tokens"] = self.login_result.response
         if self.source == SOURCE_REAUTH:
             return self.async_update_reload_and_abort(
                 self._get_reauth_entry(),

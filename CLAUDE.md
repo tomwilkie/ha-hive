@@ -73,9 +73,11 @@ only consumer.
 
 What this repository calls, and so what the library must keep:
 
-- `Hive(websession)`: `new_session(config)` (sync, sends nothing, raises
+- `Hive(websession)` (the caller owns the session; there is no `close`):
+  `new_session(config)` (sync, sends nothing, raises
   only `HiveReauthRequired`, for missing tokens or incomplete
-  `device_data`), `get_nodes()` (one `GET /nodes/all`, used for discovery
+  `device_data`; the tokens must be shaped like Cognito's response,
+  `{"AuthenticationResult": {...}}`, which is what entries save), `get_nodes()` (one `GET /nodes/all`, used for discovery
   and every poll; returns `Nodes` or raises a `HiveError`, including
   `HiveConnectionError` for a reply with no products or no devices).
 - Commands, each one `POST` that returns nothing or raises a `HiveError`:
@@ -84,12 +86,20 @@ What this repository calls, and so what the library must keep:
   `set_heating_boost(heating_product, minutes, target)`,
   `set_hot_water_boost(hot_water_product, minutes)`. There is no boost-off
   call, and the library checks no argument values.
-- `Auth(username=, password=)`: `login`, `sms_2fa(code, challenge)`,
+- `Auth(username, password, device_key=, *, websession)`: `login()` and
+  `sms_2fa(code, result)` (passed the `LoginResult` from `login`), each
+  returning a `LoginResult`; `refresh_token(refresh_token)`, which keeps the
+  fresh access token on `auth.access_token` and needs `device_key=` because
+  the refresh token is tied to the trusted device;
   `device_registration(name)`, `get_device_data()` (sync; the three device
   credentials, stored whole as `device_data` in the config entry; v0.0.1
   added the token issue time, which v0.1.0 accepts and ignores),
   `is_device_registered()`,
-  `forget_device(access_token, device_key)`.
+  `forget_device(access_token, device_key)`. Auth has no file mode: only
+  `Hive.new_session` uses the `use@file.com` fixture.
+- `LoginResult` (frozen): `response` (Cognito's response as it came, saved
+  as `tokens` in the config entry), `complete`, `sms_required`,
+  `new_device`.
 - The frozen dataclasses `get_nodes` returns, read as attributes. Fields
   keep Hive's names and raw values; a missing or wrong-typed value is None.
   - `Nodes`: `user` (`User`: `temperature_unit`), `products` (by ID) and
@@ -105,7 +115,7 @@ What this repository calls, and so what the library must keep:
     `mac_address`.
 - From `hiveheating`: `HiveError`, `HiveConnectionError`, `HiveApiError`,
   `HiveReauthRequired` and its subclasses `HiveInvalidUsername`,
-  `HiveInvalidPassword`, `HiveInvalid2FACode`; `SMS_REQUIRED`; `Mode`.
+  `HiveInvalidPassword`, `HiveInvalid2FACode`; `LoginResult`; `Mode`.
 
 ## From Hive's model to Home Assistant's
 
@@ -156,6 +166,7 @@ mapping.
 | config flow (login, 2FA, resend, registration) | `HiveInvalidUsername` / `HiveInvalidPassword` / `HiveInvalid2FACode` | form error `invalid_username` / `invalid_password` / `invalid_code` |
 | | `HiveConnectionError` | form error `no_internet_available` |
 | | any other `HiveError` | form error `unknown`, logged at ERROR |
+| `async_remove_entry` (refresh, forget device) | `HiveError` | logged at WARNING; the entry is still removed |
 
 Home Assistant logs setup and refresh failures itself: raise, do not log
 and raise.
@@ -223,8 +234,6 @@ scripts/check_requirements
 - Refreshed tokens are never written back to the config entry (Pyhive#123):
   the library treats saved tokens as due for a refresh, so every start
   refreshes them. Needs a token-updated hook in the library.
-- `async_remove_entry` forgets the device with the access token saved at
-  registration, which has usually expired by then.
 
 ## Links
 
