@@ -1,5 +1,6 @@
 """Tests for the Hive integration."""
 
+from collections.abc import Generator
 from dataclasses import replace
 from unittest.mock import MagicMock, call, patch
 
@@ -11,6 +12,7 @@ from hiveheating import (
     HiveError,
     HiveInvalidPassword,
     HiveReauthRequired,
+    LoginResult,
     Nodes,
 )
 import pytest
@@ -1217,24 +1219,73 @@ async def test_services_are_registered_without_devices(
     assert "Error unloading entry" not in caplog.text
 
 
+@pytest.fixture
+def mock_remove_auth() -> Generator[MagicMock]:
+    """Patch the Auth instance that forgets the device when the entry is removed.
+
+    Like the library, refresh_token keeps the fresh access token on the instance.
+    """
+    with patch("custom_components.hive.Auth", autospec=True) as mock_auth_class:
+        mock_auth = mock_auth_class.return_value
+
+        async def refresh_token(token: str) -> LoginResult:
+            mock_auth.access_token = "refreshed-access-token"
+            return LoginResult({})
+
+        mock_auth.refresh_token.side_effect = refresh_token
+        yield mock_auth_class
+
+
 async def test_removing_the_entry_forgets_the_hive_device(
     hass: HomeAssistant,
     mock_hive: MagicMock,
+    mock_remove_auth: MagicMock,
 ) -> None:
-    """Removing the entry tells Hive to forget the registered device."""
+    """Removing the entry refreshes the tokens, then has Hive forget the device with the new one."""
     entry = MockConfigEntry(
         domain=DOMAIN, data={**ENTRY_DATA, "device_data": DEVICE_DATA}
     )
     await setup_entry(hass, entry)
 
-    with patch("custom_components.hive.Auth", autospec=True) as mock_auth_class:
-        await hass.config_entries.async_remove(entry.entry_id)
-        await hass.async_block_till_done()
+    await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done()
 
     assert hass.config_entries.async_entries(DOMAIN) == []
-    mock_auth_class.return_value.forget_device.assert_awaited_once_with(
-        "mock-access-token", "mock-device-key"
+    assert mock_remove_auth.call_args.kwargs["device_key"] == "mock-device-key"
+    mock_auth = mock_remove_auth.return_value
+    mock_auth.refresh_token.assert_awaited_once_with("mock-refresh-token")
+    mock_auth.forget_device.assert_awaited_once_with(
+        "refreshed-access-token", "mock-device-key"
     )
+
+
+@pytest.mark.parametrize(
+    "method", ["refresh_token", "forget_device"], ids=["refresh", "forget"]
+)
+async def test_removing_the_entry_survives_a_hive_error(
+    hass: HomeAssistant,
+    caplog: pytest.LogCaptureFixture,
+    mock_hive: MagicMock,
+    mock_remove_auth: MagicMock,
+    method: str,
+) -> None:
+    """A Hive failure while forgetting the device is logged and the entry is still removed."""
+    entry = MockConfigEntry(
+        domain=DOMAIN, data={**ENTRY_DATA, "device_data": DEVICE_DATA}
+    )
+    await setup_entry(hass, entry)
+    getattr(mock_remove_auth.return_value, method).side_effect = HiveConnectionError(
+        "Timed out calling Hive"
+    )
+
+    await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert hass.config_entries.async_entries(DOMAIN) == []
+    assert "Could not ask Hive to forget the device: Timed out calling Hive" in (
+        caplog.text
+    )
+    assert "Traceback" not in caplog.text
 
 
 async def test_devices_can_be_removed_from_the_entry(

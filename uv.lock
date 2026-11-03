@@ -1168,7 +1168,7 @@ dev = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "hiveheating", specifier = "==0.3.1" },
+    { name = "hiveheating", specifier = "==0.4.0" },
     { name = "pre-commit" },
     { name = "pytest-homeassistant-custom-component", specifier = "==0.13.373" },
 ]
@@ -1253,16 +1253,16 @@ wheels = [
 
 [[package]]
 name = "hiveheating"
-version = "0.3.1"
+version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
     { name = "boto3" },
     { name = "botocore" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1e/48/4d4467dbbfbfc6feaa8ae7aecd4bd16bde228ab6eff86e4ecb0d26097b4f/hiveheating-0.3.1.tar.gz", hash = "sha256:b07eac7627a42e4c26223a7eef1605b5f631527ddec499c95b95d5f6effd58ac", size = 33560, upload-time = "2026-11-02T21:05:13.865Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/28/9d/599e96b848cc0533f02e6e7be666ec931e7753ebb95b6c729cff2ac8f212/hiveheating-0.4.0.tar.gz", hash = "sha256:d023788e7bee03bd2af69a14d41464244103d95dd15f9e5677e84e6d4fe88281", size = 32791, upload-time = "2026-11-03T20:22:16.715Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0a/0e/be7658a2a6700ec0f16a51140b79d760790eb8144618395e437c6d2b053b/hiveheating-0.3.1-py3-none-any.whl", hash = "sha256:f88e8b5d92a33320a7b27a0b213d1467fa70c06383db7e8e4f1458f2ee9db249", size = 30991, upload-time = "2026-11-02T21:05:12.616Z" },
+    { url = "https://files.pythonhosted.org/packages/7c/b3/990ffe1e54a60501eecbc1fafa771ef8db3fecda8d0e0208454b8d1712f4/hiveheating-0.4.0-py3-none-any.whl", hash = "sha256:40b4feae0b2cfda2f2624c77f0e9513c1484fbdc4a59d62404765641b101f31a", size = 30011, upload-time = "2026-11-03T20:22:15.242Z" },
 ]
 
 [[package]]

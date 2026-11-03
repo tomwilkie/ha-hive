@@ -9,6 +9,7 @@ from hiveheating import (
     HiveInvalid2FACode,
     HiveInvalidPassword,
     HiveInvalidUsername,
+    LoginResult,
 )
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -23,7 +24,9 @@ from homeassistant.data_entry_flow import FlowResultType
 from tests.common import DEVICE_DATA, ENTRY_DATA, PASSWORD, TOKENS, USERNAME
 
 LOGIN = {CONF_USERNAME: USERNAME, CONF_PASSWORD: PASSWORD}
-SMS_CHALLENGE = {"ChallengeName": "SMS_MFA", "Session": "mock-session"}
+# What Auth returns for each of Cognito's answers.
+LOGGED_IN = LoginResult(TOKENS)
+SMS_CHALLENGE = LoginResult({"ChallengeName": "SMS_MFA", "Session": "mock-session"})
 TOKENS_FOR_NEW_DEVICE = {
     "ChallengeName": "SUCCESS",
     "AuthenticationResult": {
@@ -34,7 +37,8 @@ TOKENS_FOR_NEW_DEVICE = {
         },
     },
 }
-NO_TOKENS = {"ChallengeName": "FAILED"}
+NEW_DEVICE = LoginResult(TOKENS_FOR_NEW_DEVICE)
+NO_TOKENS = LoginResult({"ChallengeName": "FAILED"})
 UPDATED_PASSWORD = "updated-password"
 DEVICE_NAME = "Test Home Assistant"
 MFA_CODE = "1234"
@@ -94,7 +98,7 @@ async def test_login_creates_the_entry(
     username: str,
 ) -> None:
     """A login needing no 2FA or registration creates the entry under the lower-cased username."""
-    mock_auth.login.return_value = TOKENS
+    mock_auth.login.return_value = LOGGED_IN
     result = await _start_user_flow(hass)
 
     result = await _submit(
@@ -118,7 +122,7 @@ async def test_login_from_a_new_device_registers_it(
     hass: HomeAssistant, mock_auth: MagicMock
 ) -> None:
     """Tokens with NewDeviceMetadata lead to the device name form, then registration."""
-    mock_auth.login.return_value = TOKENS_FOR_NEW_DEVICE
+    mock_auth.login.return_value = NEW_DEVICE
     mock_auth.get_device_data.return_value = DEVICE_DATA
     result = await _start_user_flow(hass)
 
@@ -143,7 +147,7 @@ async def test_login_with_2fa_registers_the_device(
 ) -> None:
     """An SMS challenge leads to the code form, then to device registration."""
     mock_auth.login.return_value = SMS_CHALLENGE
-    mock_auth.sms_2fa.return_value = TOKENS
+    mock_auth.sms_2fa.return_value = LOGGED_IN
     mock_auth.get_device_data.return_value = DEVICE_DATA
     result = await _start_user_flow(hass)
 
@@ -191,7 +195,7 @@ async def test_reauth_updates_the_password(
         data={**ENTRY_DATA, CONF_PASSWORD: "incorrect-password"},
     )
     entry.add_to_hass(hass)
-    mock_auth.login.side_effect = [HiveInvalidPassword(), TOKENS]
+    mock_auth.login.side_effect = [HiveInvalidPassword(), LOGGED_IN]
 
     result = await entry.start_reauth_flow(hass)
     assert result["type"] is FlowResultType.FORM
@@ -219,7 +223,7 @@ async def test_reauth_with_2fa_keeps_a_registered_device(
     )
     entry.add_to_hass(hass)
     mock_auth.login.return_value = SMS_CHALLENGE
-    mock_auth.sms_2fa.return_value = TOKENS
+    mock_auth.sms_2fa.return_value = LOGGED_IN
     mock_auth.is_device_registered.return_value = True
 
     result = await entry.start_reauth_flow(hass)
@@ -242,7 +246,7 @@ async def test_reauth_with_2fa_registers_a_forgotten_device(
     entry = MockConfigEntry(domain=DOMAIN, unique_id=USERNAME, data=ENTRY_DATA)
     entry.add_to_hass(hass)
     mock_auth.login.return_value = SMS_CHALLENGE
-    mock_auth.sms_2fa.return_value = TOKENS
+    mock_auth.sms_2fa.return_value = LOGGED_IN
     mock_auth.is_device_registered.return_value = False
     mock_auth.get_device_data.return_value = DEVICE_DATA
 
@@ -268,7 +272,7 @@ async def test_reauth_retries_a_failed_registration_check(
     entry = MockConfigEntry(domain=DOMAIN, unique_id=USERNAME, data=ENTRY_DATA)
     entry.add_to_hass(hass)
     mock_auth.login.return_value = SMS_CHALLENGE
-    mock_auth.sms_2fa.return_value = TOKENS
+    mock_auth.sms_2fa.return_value = LOGGED_IN
     mock_auth.is_device_registered.side_effect = [error, True]
 
     result = await entry.start_reauth_flow(hass)
@@ -336,7 +340,7 @@ async def test_registration_error_is_shown_on_the_form(
     hass: HomeAssistant, mock_auth: MagicMock, error: HiveError, message: str
 ) -> None:
     """A failed device registration keeps the name form open and saves no device data."""
-    mock_auth.login.return_value = TOKENS_FOR_NEW_DEVICE
+    mock_auth.login.return_value = NEW_DEVICE
     mock_auth.device_registration.side_effect = error
     result = await _start_user_flow(hass)
     result = await _submit(hass, result, LOGIN)

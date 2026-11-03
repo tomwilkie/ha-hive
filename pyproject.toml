@@ -11,7 +11,7 @@ dev = [
     "pre-commit",
     # Keep in step with the requirement in custom_components/hive/manifest.json;
     # tests/test_manifest.py checks that they match.
-    "hiveheating==0.3.1",
+    "hiveheating==0.4.0",
 ]
 
 [tool.pytest.ini_options]
