@@ -12,7 +12,7 @@
   "issue_tracker": "https://github.com/tomwilkie/ha-hive/issues",
   "loggers": ["hiveheating"],
   "requirements": [
-    "hiveheating==0.4.0"
+    "hiveheating==0.4.1"
   ],
-  "version": "0.2.1"
+  "version": "0.2.2"
 }
