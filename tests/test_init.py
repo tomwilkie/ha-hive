@@ -2,6 +2,7 @@
 
 from collections.abc import Generator
 from dataclasses import replace
+from typing import Any
 from unittest.mock import MagicMock, call, patch
 
 from freezegun.api import FrozenDateTimeFactory
@@ -1262,29 +1263,68 @@ async def test_removing_the_entry_forgets_the_hive_device(
 @pytest.mark.parametrize(
     "method", ["refresh_token", "forget_device"], ids=["refresh", "forget"]
 )
+@pytest.mark.parametrize(
+    "error",
+    [
+        HiveConnectionError("Timed out calling Hive"),
+        HiveApiError(
+            "Cognito forget_device failed with NotAuthorizedException: "
+            "Access Token has expired"
+        ),
+    ],
+    ids=["connection", "api"],
+)
 async def test_removing_the_entry_survives_a_hive_error(
     hass: HomeAssistant,
     caplog: pytest.LogCaptureFixture,
     mock_hive: MagicMock,
     mock_remove_auth: MagicMock,
     method: str,
+    error: HiveError,
 ) -> None:
     """A Hive failure while forgetting the device is logged and the entry is still removed."""
     entry = MockConfigEntry(
         domain=DOMAIN, data={**ENTRY_DATA, "device_data": DEVICE_DATA}
     )
     await setup_entry(hass, entry)
-    getattr(mock_remove_auth.return_value, method).side_effect = HiveConnectionError(
-        "Timed out calling Hive"
-    )
+    getattr(mock_remove_auth.return_value, method).side_effect = error
 
     await hass.config_entries.async_remove(entry.entry_id)
     await hass.async_block_till_done()
 
     assert hass.config_entries.async_entries(DOMAIN) == []
-    assert "Could not ask Hive to forget the device: Timed out calling Hive" in (
-        caplog.text
+    assert (
+        f"Could not ask Hive to forget the device: {error}. Remove it in the Hive app"
+        in caplog.text
     )
+    assert "Traceback" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        ENTRY_DATA,
+        {**ENTRY_DATA, "device_data": DEVICE_DATA, "tokens": {}},
+    ],
+    ids=["no_device_data", "no_refresh_token"],
+)
+async def test_removing_an_entry_without_device_credentials(
+    hass: HomeAssistant,
+    caplog: pytest.LogCaptureFixture,
+    mock_hive: MagicMock,
+    mock_remove_auth: MagicMock,
+    data: dict[str, Any],
+) -> None:
+    """An entry with no saved device key or refresh token is removed without calling Hive."""
+    entry = MockConfigEntry(domain=DOMAIN, data=data)
+    entry.add_to_hass(hass)
+
+    await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert hass.config_entries.async_entries(DOMAIN) == []
+    mock_remove_auth.assert_not_called()
+    assert "the entry has no saved device credentials" in caplog.text
     assert "Traceback" not in caplog.text
 
 
