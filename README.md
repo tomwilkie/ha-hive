@@ -42,7 +42,7 @@ composed name.
 
 To go back to the built-in integration, remove it in HACS and restart.
 
-Requires Home Assistant 2026.10 or later.
+Requires Home Assistant 2026.11 or later.
 
 ## Development
 

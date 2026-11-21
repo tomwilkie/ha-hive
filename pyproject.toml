@@ -1,13 +1,14 @@
 [project]
 name = "ha-hive"
-version = "0.2.3"
+version = "0.3.0"
 description = "Hive integration for Home Assistant"
 requires-python = ">=3.14.2"
 dependencies = []
 
 [dependency-groups]
 dev = [
-    "pytest-homeassistant-custom-component==0.13.373",
+    "pytest-homeassistant==2026.11.2",
+    "pytest-cov==7.1.0",
     "pre-commit",
     # Keep in step with the requirement in custom_components/hive/manifest.json;
     # tests/test_manifest.py checks that they match.
@@ -16,8 +17,10 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
-addopts = "--cov --cov-report=term-missing"
+# Let Home Assistant install its httpx alias before respx is imported.
+addopts = "-p no:respx --cov --cov-report=term-missing"
 
 [tool.coverage.run]
 source = ["custom_components"]

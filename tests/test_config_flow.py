@@ -12,9 +12,9 @@ from hiveheating import (
     LoginResult,
 )
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
-from custom_components.hive.const import CONF_CODE, CONF_DEVICE_NAME, DOMAIN
+from custom_components.hive.const import CONF_CODE, DOMAIN
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
@@ -40,7 +40,6 @@ TOKENS_FOR_NEW_DEVICE = {
 NEW_DEVICE = LoginResult(TOKENS_FOR_NEW_DEVICE)
 NO_TOKENS = LoginResult({"ChallengeName": "FAILED"})
 UPDATED_PASSWORD = "updated-password"
-DEVICE_NAME = "Test Home Assistant"
 MFA_CODE = "1234"
 RESEND_CODE = "0000"
 
@@ -121,7 +120,7 @@ async def test_login_creates_the_entry(
 async def test_login_from_a_new_device_registers_it(
     hass: HomeAssistant, mock_auth: MagicMock
 ) -> None:
-    """Tokens with NewDeviceMetadata lead to the device name form, then registration."""
+    """Tokens with NewDeviceMetadata lead to the configuration form, then registration."""
     mock_auth.login.return_value = NEW_DEVICE
     mock_auth.get_device_data.return_value = DEVICE_DATA
     result = await _start_user_flow(hass)
@@ -130,7 +129,7 @@ async def test_login_from_a_new_device_registers_it(
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "configuration"
 
-    result = await _submit(hass, result, {CONF_DEVICE_NAME: DEVICE_NAME})
+    result = await _submit(hass, result, {})
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"] == {
@@ -138,7 +137,7 @@ async def test_login_from_a_new_device_registers_it(
         "tokens": TOKENS_FOR_NEW_DEVICE,
         "device_data": DEVICE_DATA,
     }
-    mock_auth.device_registration.assert_awaited_once_with(DEVICE_NAME)
+    mock_auth.device_registration.assert_awaited_once_with("Home Assistant")
 
 
 @pytest.mark.usefixtures("mock_setup_entry")
@@ -159,12 +158,12 @@ async def test_login_with_2fa_registers_the_device(
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "configuration"
 
-    result = await _submit(hass, result, {CONF_DEVICE_NAME: DEVICE_NAME})
+    result = await _submit(hass, result, {})
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"] == {**LOGIN, "tokens": TOKENS, "device_data": DEVICE_DATA}
     mock_auth.sms_2fa.assert_awaited_once_with(MFA_CODE, SMS_CHALLENGE)
-    mock_auth.device_registration.assert_awaited_once_with(DEVICE_NAME)
+    mock_auth.device_registration.assert_awaited_once_with("Home Assistant")
 
 
 async def test_entering_0000_requests_a_new_code(
@@ -255,12 +254,12 @@ async def test_reauth_with_2fa_registers_a_forgotten_device(
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "configuration"
 
-    result = await _submit(hass, result, {CONF_DEVICE_NAME: DEVICE_NAME})
+    result = await _submit(hass, result, {})
 
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reauth_successful"
     assert entry.data["device_data"] == DEVICE_DATA
-    mock_auth.device_registration.assert_awaited_once_with(DEVICE_NAME)
+    mock_auth.device_registration.assert_awaited_once_with("Home Assistant")
 
 
 @pytest.mark.parametrize(("error", "message"), CONNECTION_ERRORS)
@@ -339,13 +338,13 @@ async def test_resend_error_is_shown_on_the_form(
 async def test_registration_error_is_shown_on_the_form(
     hass: HomeAssistant, mock_auth: MagicMock, error: HiveError, message: str
 ) -> None:
-    """A failed device registration keeps the name form open and saves no device data."""
+    """A failed device registration keeps the configuration form open and saves no device data."""
     mock_auth.login.return_value = NEW_DEVICE
     mock_auth.device_registration.side_effect = error
     result = await _start_user_flow(hass)
     result = await _submit(hass, result, LOGIN)
 
-    result = await _submit(hass, result, {CONF_DEVICE_NAME: DEVICE_NAME})
+    result = await _submit(hass, result, {})
 
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "configuration"
@@ -370,7 +369,7 @@ async def test_login_without_tokens_is_an_unknown_error(
 async def test_2fa_without_tokens_fails_at_configuration(
     hass: HomeAssistant, mock_auth: MagicMock
 ) -> None:
-    """A code response without tokens still reaches the name form, which then fails."""
+    """A code response without tokens still reaches the configuration form, which then fails."""
     mock_auth.login.return_value = SMS_CHALLENGE
     mock_auth.sms_2fa.return_value = NO_TOKENS
     mock_auth.get_device_data.return_value = DEVICE_DATA
@@ -379,7 +378,7 @@ async def test_2fa_without_tokens_fails_at_configuration(
     result = await _submit(hass, result, {CONF_CODE: MFA_CODE})
     assert result["step_id"] == "configuration"
 
-    result = await _submit(hass, result, {CONF_DEVICE_NAME: DEVICE_NAME})
+    result = await _submit(hass, result, {})
 
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "configuration"
