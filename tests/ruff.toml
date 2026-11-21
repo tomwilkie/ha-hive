@@ -29,7 +29,7 @@ known-first-party = [
 ]
 known-third-party = [
     "pytest",
-    "pytest_homeassistant_custom_component",
+    "pytest_homeassistant",
     "probatio",
 ]
 forced-separate = [

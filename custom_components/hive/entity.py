@@ -125,7 +125,7 @@ class HiveEntity(CoordinatorEntity[HiveDataUpdateCoordinator]):
             )
         hub = find_hub(coordinator.data)
         if hub is not None and hub.id != device_id:
-            device_info["via_device_id"] = dr.async_get_device_id_by_identifier(
+            device_info.via_device_id = dr.async_get_device_id_by_identifier(
                 coordinator.hass,
                 (DOMAIN, hub.id),
                 config_entry_id=coordinator.config_entry.entry_id,

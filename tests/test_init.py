@@ -17,18 +17,12 @@ from hiveheating import (
     Nodes,
 )
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.hive import async_remove_config_entry_device
-from custom_components.hive.const import (
-    ATTR_ONOFF,
-    ATTR_TIME_PERIOD,
-    DOMAIN,
-    SERVICE_BOOST_HEATING_OFF,
-    SERVICE_BOOST_HEATING_ON,
-    SERVICE_BOOST_HOT_WATER,
-)
+from custom_components.hive.const import DOMAIN
 from custom_components.hive.coordinator import MAX_DEGRADED_POLLS
+from custom_components.hive.services import HiveService, HiveServiceArgument
 from homeassistant.components.binary_sensor import DOMAIN as BINARY_SENSOR_DOMAIN
 from homeassistant.components.climate import (
     ATTR_CURRENT_TEMPERATURE,
@@ -868,8 +862,8 @@ async def test_degraded_first_reply_is_shown_as_sent(
             id="boost-preset",
         ),
         pytest.param(
-            (DOMAIN, SERVICE_BOOST_HEATING_ON),
-            {ATTR_TIME_PERIOD: "01:00:00", ATTR_TEMPERATURE: 22.0},
+            (DOMAIN, HiveService.BOOST_HEATING_ON),
+            {HiveServiceArgument.TIME_PERIOD: "01:00:00", ATTR_TEMPERATURE: 22.0},
             call.set_heating_boost(HEATING, 60, 22.0),
             id="boost-heating-on",
         ),
@@ -947,15 +941,15 @@ async def test_set_temperature_sets_the_hvac_mode_first(
         pytest.param(
             replace(HEATING, mode="BOOST", boost=30, previous_mode="SCHEDULE"),
             (CLIMATE_DOMAIN, CLIMATE_UNIQUE_ID),
-            (DOMAIN, SERVICE_BOOST_HEATING_OFF),
+            (DOMAIN, HiveService.BOOST_HEATING_OFF),
             {},
             id="boost-heating-off",
         ),
         pytest.param(
             replace(HOT_WATER, mode="BOOST", boost=30, previous_mode="SCHEDULE"),
             (WATER_HEATER_DOMAIN, WATER_HEATER_UNIQUE_ID),
-            (DOMAIN, SERVICE_BOOST_HOT_WATER),
-            {ATTR_ONOFF: "off"},
+            (DOMAIN, HiveService.BOOST_HOT_WATER),
+            {HiveServiceArgument.ON_OFF: "off"},
             id="boost-hot-water-off",
         ),
     ],
@@ -994,7 +988,7 @@ async def test_ending_a_boost_from_off_sets_off(
         hass,
         entity_registry,
         (CLIMATE_DOMAIN, CLIMATE_UNIQUE_ID),
-        (DOMAIN, SERVICE_BOOST_HEATING_OFF),
+        (DOMAIN, HiveService.BOOST_HEATING_OFF),
         {},
     )
 
@@ -1014,7 +1008,7 @@ async def test_ending_a_boost_that_is_not_active_sends_nothing(
         hass,
         entity_registry,
         (CLIMATE_DOMAIN, CLIMATE_UNIQUE_ID),
-        (DOMAIN, SERVICE_BOOST_HEATING_OFF),
+        (DOMAIN, HiveService.BOOST_HEATING_OFF),
         {},
     )
 
@@ -1038,7 +1032,7 @@ async def test_ending_a_boost_without_a_previous_mode_fails(
             hass,
             entity_registry,
             (CLIMATE_DOMAIN, CLIMATE_UNIQUE_ID),
-            (DOMAIN, SERVICE_BOOST_HEATING_OFF),
+            (DOMAIN, HiveService.BOOST_HEATING_OFF),
             {},
         )
 
@@ -1067,8 +1061,11 @@ async def test_ending_a_boost_without_a_previous_mode_fails(
             id="operation-mode",
         ),
         pytest.param(
-            (DOMAIN, SERVICE_BOOST_HOT_WATER),
-            {ATTR_TIME_PERIOD: "01:30:00", ATTR_ONOFF: "on"},
+            (DOMAIN, HiveService.BOOST_HOT_WATER),
+            {
+                HiveServiceArgument.TIME_PERIOD: "01:30:00",
+                HiveServiceArgument.ON_OFF: "on",
+            },
             call.set_hot_water_boost(HOT_WATER, 90),
             id="boost-on",
         ),
@@ -1148,29 +1145,32 @@ async def test_failed_command_raises_home_assistant_error(
     [
         pytest.param(
             (CLIMATE_DOMAIN, CLIMATE_UNIQUE_ID),
-            (DOMAIN, SERVICE_BOOST_HEATING_ON),
-            {ATTR_TIME_PERIOD: "00:00:30", ATTR_TEMPERATURE: 20.0},
+            (DOMAIN, HiveService.BOOST_HEATING_ON),
+            {HiveServiceArgument.TIME_PERIOD: "00:00:30", ATTR_TEMPERATURE: 20.0},
             "Boost minutes must be positive",
             id="heating-boost-too-short",
         ),
         pytest.param(
             (CLIMATE_DOMAIN, CLIMATE_UNIQUE_ID),
-            (DOMAIN, SERVICE_BOOST_HEATING_ON),
-            {ATTR_TIME_PERIOD: "00:30:00", ATTR_TEMPERATURE: 33.0},
+            (DOMAIN, HiveService.BOOST_HEATING_ON),
+            {HiveServiceArgument.TIME_PERIOD: "00:30:00", ATTR_TEMPERATURE: 33.0},
             "Boost temperature must be between 5.0 and 32.0",
             id="heating-boost-too-hot",
         ),
         pytest.param(
             (CLIMATE_DOMAIN, CLIMATE_UNIQUE_ID),
-            (DOMAIN, SERVICE_BOOST_HEATING_ON),
-            {ATTR_TIME_PERIOD: "00:30:00", ATTR_TEMPERATURE: 4.5},
+            (DOMAIN, HiveService.BOOST_HEATING_ON),
+            {HiveServiceArgument.TIME_PERIOD: "00:30:00", ATTR_TEMPERATURE: 4.5},
             "Boost temperature must be between 5.0 and 32.0",
             id="heating-boost-too-cold",
         ),
         pytest.param(
             (WATER_HEATER_DOMAIN, WATER_HEATER_UNIQUE_ID),
-            (DOMAIN, SERVICE_BOOST_HOT_WATER),
-            {ATTR_TIME_PERIOD: "00:00:30", ATTR_ONOFF: "on"},
+            (DOMAIN, HiveService.BOOST_HOT_WATER),
+            {
+                HiveServiceArgument.TIME_PERIOD: "00:00:30",
+                HiveServiceArgument.ON_OFF: "on",
+            },
             "Boost minutes must be positive",
             id="hot-water-boost-too-short",
         ),
@@ -1208,9 +1208,9 @@ async def test_services_are_registered_without_devices(
 
     assert mock_config_entry.state is ConfigEntryState.LOADED
     # Entity services must not depend on device discovery.
-    assert hass.services.has_service(DOMAIN, SERVICE_BOOST_HOT_WATER)
-    assert hass.services.has_service(DOMAIN, SERVICE_BOOST_HEATING_ON)
-    assert hass.services.has_service(DOMAIN, SERVICE_BOOST_HEATING_OFF)
+    assert hass.services.has_service(DOMAIN, HiveService.BOOST_HOT_WATER)
+    assert hass.services.has_service(DOMAIN, HiveService.BOOST_HEATING_ON)
+    assert hass.services.has_service(DOMAIN, HiveService.BOOST_HEATING_OFF)
 
     await hass.config_entries.async_reload(mock_config_entry.entry_id)
     await hass.async_block_till_done()

@@ -1,8 +1,10 @@
 {
   "domain": "hive",
   "name": "Hive",
+  "categories": ["climate.thermostats_heating"],
   "codeowners": ["@tomwilkie"],
   "config_flow": true,
+  "connectivity": ["cloud"],
   "documentation": "https://github.com/tomwilkie/ha-hive",
   "homekit": {
     "models": ["HHKBridge*"]
@@ -14,5 +16,5 @@
   "requirements": [
     "hiveheating==0.4.1"
   ],
-  "version": "0.2.3"
+  "version": "0.3.0"
 }

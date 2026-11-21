@@ -24,8 +24,11 @@ retried, not become a permanent setup error.
   Release, which HACS offers as a versioned install. `hacs.json`'s
   `homeassistant` is the oldest core release the
   code runs on. Raise it when using a newer core API: the code already needs
-  2026.10 for `dr.async_get_device_id_by_identifier`, `probatio` and
-  `AddConfigEntryEntitiesCallback`.
+  2026.11 for the native climate and water heater temperature properties,
+  config entry methods returning `None`, `async_unload_platforms_or_raise`
+  and the `DeviceInfo` dataclass. The tests run under core's
+  `pytest-homeassistant`, whose release matches the `homeassistant` it pins:
+  keep it at the release in `hacs.json`.
 - Home Assistant installs the library from PyPI, pinned in `manifest.json`
   `requirements` as `hiveheating==<version>`. The `dev` group of
   `pyproject.toml` carries the same pin so the tests run against the release
@@ -221,7 +224,7 @@ custom_components/hive/
 ├── services.py        ← boost_heating_on/off and boost_hot_water, registered in async_setup
 ├── const.py, manifest.json, services.yaml, icons.json
 └── strings.json, translations/en.json
-tests/                 ← pytest-homeassistant-custom-component; helpers in common.py,
+tests/                 ← pytest-homeassistant; helpers in common.py,
                          fixtures in conftest.py
 scripts/check_requirements
 ```

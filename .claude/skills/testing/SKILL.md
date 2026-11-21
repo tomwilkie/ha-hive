@@ -15,9 +15,9 @@ Test-writing practices for pytest that no linter checks.
 **`CLAUDE.md` and the existing tests take precedence.** Where a rule's example
 differs from the repo, follow the repo:
 
-- The tests run under pytest-homeassistant-custom-component: use its `hass`,
+- The tests run under core's pytest-homeassistant: use its `hass`,
   `device_registry` and `entity_registry` fixtures and `MockConfigEntry`.
-  `enable_custom_integrations` is applied automatically (`tests/conftest.py`).
+  Its `hass` fixture loads custom integrations by default.
 - Mock at the `hiveheating` boundary only. The fixtures in `tests/conftest.py`
   do that: `mock_hive` patches `Hive` with `autospec=True` (so a renamed
   method fails), `mock_auth` (and `mock_auth_class`) patch `Auth` in the

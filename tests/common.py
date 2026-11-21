@@ -9,10 +9,7 @@ from collections.abc import Iterable
 
 from freezegun.api import FrozenDateTimeFactory
 from hiveheating import Device, HeatingProduct, HotWaterProduct, Nodes, Product, User
-from pytest_homeassistant_custom_component.common import (
-    MockConfigEntry,
-    async_fire_time_changed,
-)
+from pytest_homeassistant.common import MockConfigEntry, async_fire_time_changed
 
 from custom_components.hive.coordinator import SCAN_INTERVAL
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME

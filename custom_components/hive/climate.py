@@ -92,7 +92,7 @@ class HiveClimateEntity(HiveEntity, ClimateEntity):
 
     @property
     @override
-    def temperature_unit(self) -> str:
+    def native_temperature_unit(self) -> str:
         """Return the account's unit; Hive reports none when it has none set."""
         unit = self.coordinator.data.user.temperature_unit
         return TEMP_UNIT.get(unit or "", UnitOfTemperature.CELSIUS)
@@ -113,14 +113,14 @@ class HiveClimateEntity(HiveEntity, ClimateEntity):
 
     @property
     @override
-    def current_temperature(self) -> float | None:
+    def native_current_temperature(self) -> float | None:
         """Return the measured temperature, to one decimal place."""
         temperature = self.heating.temperature
         return None if temperature is None else round(temperature, 1)
 
     @property
     @override
-    def target_temperature(self) -> float | None:
+    def native_target_temperature(self) -> float | None:
         """Return the target temperature."""
         return self.heating.target
 
@@ -153,7 +153,7 @@ class HiveClimateEntity(HiveEntity, ClimateEntity):
         if preset_mode == PRESET_NONE and self.preset_mode == PRESET_BOOST:
             await self.async_end_boost()
         elif preset_mode == PRESET_BOOST:
-            curtemp = round((self.current_temperature or 0) * 2) / 2
+            curtemp = round((self.native_current_temperature or 0) * 2) / 2
             temperature = curtemp + 0.5
             await self._async_boost(30, temperature)
 

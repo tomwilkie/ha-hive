@@ -4,16 +4,11 @@ from collections.abc import Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.hive.const import DOMAIN
 
 from tests.common import ENTRY_DATA, USERNAME, make_nodes
-
-
-@pytest.fixture(autouse=True)
-def auto_enable_custom_integrations(enable_custom_integrations: None) -> None:
-    """Load the integration from custom_components."""
 
 
 @pytest.fixture
